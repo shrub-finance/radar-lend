@@ -1,16 +1,69 @@
-import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { SolSavings } from "../target/types/sol_savings";
+const anchor = require('@project-serum/anchor');
+const { SystemProgram } = anchor.web3;
 
-describe("sol-savings", () => {
-  // Configure the client to use the local cluster.
-  anchor.setProvider(anchor.AnchorProvider.env());
+// Configure the client to use the local cluster
+anchor.setProvider(anchor.AnchorProvider.env());
+const provider = anchor.getProvider();
 
-  const program = anchor.workspace.SolSavings as Program<SolSavings>;
+// Use the new Program ID
+const programId = new anchor.web3.PublicKey("6by9V5oJ94qNncdydXgng9vreiFNY3Z7QydxWgxZzKyX");
+const program = new anchor.Program(require('./target/idl/sol_savings.json'), programId, provider);
 
-  it("Is initialized!", async () => {
-    // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
-  });
-});
+async function main() {
+  // Generate a new keypair for the user account
+  const userAccount = anchor.web3.Keypair.generate();
+
+  console.log("Initializing user account...");
+  await program.methods.initialize()
+    .accounts({
+      userAccount: userAccount.publicKey,
+      user: provider.wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([userAccount])
+    .rpc();
+
+  console.log("User account initialized!");
+
+  // Deposit 1 SOL
+  const depositAmount = new anchor.BN(1_000_000_000); // 1 SOL in lamports
+  console.log("Depositing 1 SOL...");
+  await program.methods.deposit(depositAmount)
+    .accounts({
+      userAccount: userAccount.publicKey,
+      user: provider.wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  console.log("Deposit successful!");
+
+  // Check balance
+  let account = await program.account.userAccount.fetch(userAccount.publicKey);
+  console.log("Account balance:", account.balance.toString(), "lamports");
+
+  // Withdraw 0.5 SOL
+  const withdrawAmount = new anchor.BN(500_000_000); // 0.5 SOL in lamports
+  console.log("Withdrawing 0.5 SOL...");
+  await program.methods.withdraw(withdrawAmount)
+    .accounts({
+      userAccount: userAccount.publicKey,
+      user: provider.wallet.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  console.log("Withdrawal successful!");
+
+  // Check balance again
+  account = await program.account.userAccount.fetch(userAccount.publicKey);
+  console.log("Account balance:", account.balance.toString(), "lamports");
+}
+
+main().then(
+  () => process.exit(),
+  err => {
+    console.error(err);
+    process.exit(-1);
+  }
+);
