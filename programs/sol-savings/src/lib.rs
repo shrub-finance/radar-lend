@@ -3,11 +3,12 @@ use anchor_lang::context::CpiContext;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 use anchor_spl::associated_token::AssociatedToken;
 
+
 declare_id!("3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex");
 
 const SOL_PRICE_CENTS: u64 = 10000; // $100.00 USD
-const INITIAL_USDC_SUPPLY: u64 = 1_000_000_000_000; // 1,000,000 USDC with 6 decimal places
-const SECONDS_IN_A_YEAR: u64 = 31_536_000; // 365 days
+const INITIAL_USDC_SUPPLY: u64 = 1_000_000_000_000; // 1,000,000 USDC (6 decimals)
+const SECONDS_IN_A_YEAR: u64 = 31_536_000; // 365 days in seconds
 
 #[program]
 pub mod sol_savings {
@@ -19,6 +20,7 @@ pub mod sol_savings {
         user_account.sol_balance = 0;
         user_account.usdc_balance = 0;
         user_account.loan_count = 0;
+        user_account.loans = vec![]; // Initialize loans as an empty vector
         Ok(())
     }
 
@@ -34,7 +36,7 @@ pub mod sol_savings {
         **user_account.to_account_info().try_borrow_mut_lamports()? -= amount;
         **owner.to_account_info().try_borrow_mut_lamports()? += amount;
 
-        // Update balance
+        // Update the SOL balance
         user_account.sol_balance -= amount;
         Ok(())
     }
@@ -52,7 +54,6 @@ pub mod sol_savings {
             ),
             INITIAL_USDC_SUPPLY,
         )?;
-
         Ok(())
     }
 
@@ -81,7 +82,7 @@ pub mod sol_savings {
         // Update SOL balance
         user_account.sol_balance += sol_amount;
 
-        // Calculate required collateral based on LTV
+        // Validate the LTV and determine collateral required
         let (ltv_ratio, apy) = match ltv {
             20 => (20, 0),
             25 => (25, 1),
@@ -90,6 +91,7 @@ pub mod sol_savings {
             _ => return Err(ErrorCode::InvalidLTV.into()),
         };
 
+        // Calculate required collateral based on LTV and SOL price
         let required_collateral = (usdc_amount * 100) / (ltv_ratio as u64 * SOL_PRICE_CENTS / 10000);
 
         if user_account.sol_balance < required_collateral {
@@ -120,13 +122,14 @@ pub mod sol_savings {
             ltv,
         };
 
-        // Add the loan after all other mutations are done to avoid borrowing conflicts
+        // Add the loan to the user's loan list
         user_account.loans.push(loan);
 
         // Update balances
         user_account.sol_balance -= required_collateral;
         user_account.usdc_balance += usdc_amount;
 
+        // Emit loan creation event
         emit!(LoanCreated {
             loan_id: user_account.loan_count,
             borrower: ctx.accounts.owner.key(),
@@ -141,15 +144,15 @@ pub mod sol_savings {
 
     pub fn repay_loan(ctx: Context<RepayLoan>, loan_id: u64, usdc_amount: u64) -> Result<()> {
         let user_account = &mut ctx.accounts.user_account;
-        
-        // Find the loan index
+
+        // Find the loan by ID
         let loan_index = user_account.loans.iter().position(|loan| loan.id == loan_id)
             .ok_or(ErrorCode::LoanNotFound)?;
 
         let (principal, interest, collateral, total_owed) = {
-            // First mutable borrow to access the loan
-            let loan = &mut user_account.loans[loan_index];
+            let loan = &user_account.loans[loan_index];
 
+            // Calculate interest based on time passed
             let duration = Clock::get()?.unix_timestamp - loan.start_date;
             let interest = (duration as u64 * loan.apy as u64 * loan.principal) / (SECONDS_IN_A_YEAR * 100);
             let total_owed = loan.principal + interest;
@@ -174,16 +177,14 @@ pub mod sol_savings {
             usdc_amount,
         )?;
 
-        // Update balances
+        // Update USDC balance
         user_account.usdc_balance -= usdc_amount;
 
-        // Check if loan is fully repaid and handle collateral
+        // Handle repayment logic
         if usdc_amount == total_owed {
             // Loan fully repaid, return collateral
             user_account.sol_balance += collateral;
-
-            // Remove the loan from the loans list
-            user_account.loans.remove(loan_index);
+            user_account.loans.remove(loan_index); // Remove loan after full repayment
 
             emit!(LoanRepaid {
                 loan_id,
@@ -193,15 +194,14 @@ pub mod sol_savings {
                 interest_paid: interest,
             });
         } else {
-            // Partial repayment
+            // Partial repayment: update the loan's remaining principal and interest
             let remaining = total_owed - usdc_amount;
             let remaining_principal = if remaining > interest { remaining - interest } else { 0 };
             let interest_paid = usdc_amount.saturating_sub(principal - remaining_principal);
 
-            // Update loan
             let loan = &mut user_account.loans[loan_index];
             loan.principal = remaining_principal;
-            loan.start_date = Clock::get()?.unix_timestamp;
+            loan.start_date = Clock::get()?.unix_timestamp; // Reset loan start date
 
             emit!(PartialRepayment {
                 loan_id,
