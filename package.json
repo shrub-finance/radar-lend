@@ -1,0 +1,21 @@
+{
+  "name": "radar-lend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:shrub-finance/radar-lend.git",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "yarn workspace app dev",
+    "build:app": "yarn workspace app build",
+    "app": "yarn build:app && yarn workspace app start",
+    "contracts": "yarn workspace contracts build"
+  },
+  "resolutions": {
+    "@solana/web3.js": "1.95.2"
+  },
+  "packageManager": "yarn@1.22.19+sha1.4ba7fc5c6e704fce2066ecbfb0b0d8976fe62447"
+}
