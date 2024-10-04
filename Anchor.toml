@@ -1,0 +1,29 @@
+[features]
+seeds = false
+skip-lint = false
+idl-build = ["anchor-spl/idl-build"]
+
+[programs.localnet]
+sol_savings = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
+
+[programs.devnet]
+sol_savings = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
+
+[programs.mainnet]
+sol_savings = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
+
+[registry]
+url = "https://anchor.projectserum.com" # Default Anchor registry
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn ts-mocha -p tsconfig.json tests/**/*.ts"
+
+[test]
+startup_wait = 5000
+
+[workspace]
+types = "target/types/sol_savings"
