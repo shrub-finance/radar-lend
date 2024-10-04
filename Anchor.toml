@@ -16,11 +16,11 @@ sol_savings = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
 url = "https://anchor.projectserum.com" # Default Anchor registry
 
 [provider]
-cluster = "localnet"
-wallet = "/Users/ahmadkhan/.config/solana/id.json"
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn test"
+test = "ts-mocha -p tsconfig.json tests/**/*.ts"
 
 [test]
 startup_wait = 5000
