@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::context::CpiContext;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
-use anchor_spl::associated_token::{AssociatedToken};
+use anchor_spl::associated_token::AssociatedToken;
 
 declare_id!("3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex");
 
@@ -90,7 +90,7 @@ pub mod sol_savings {
             _ => return Err(ErrorCode::InvalidLTV.into()),
         };
 
-        let required_collateral = (usdc_amount * 100) / (ltv_ratio * SOL_PRICE_CENTS / 10000);
+        let required_collateral = (usdc_amount * 100) / (ltv_ratio as u64 * SOL_PRICE_CENTS / 10000);
 
         if user_account.sol_balance < required_collateral {
             return Err(ErrorCode::InsufficientCollateral.into());
