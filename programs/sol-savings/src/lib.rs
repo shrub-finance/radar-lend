@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
-use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::associated_token::{self, AssociatedToken};
 use chainlink_solana as chainlink;
 
 declare_id!("3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex");
@@ -19,6 +19,20 @@ pub mod sol_savings {
         user_account.usdc_balance = 0;
         user_account.loan_count = 0;
         user_account.loans = vec![]; // Initialize loans as an empty vector
+
+        // Use the associated token program to create the Shrub PDA's USDC account
+        associated_token::create(CpiContext::new(
+            ctx.accounts.associated_token_program.to_account_info(),
+            associated_token::Create {
+                payer: ctx.accounts.owner.to_account_info(),
+                associated_token: ctx.accounts.shrub_usdc_account.to_account_info(),
+                authority: ctx.accounts.shrub_pda.to_account_info(),
+                mint: ctx.accounts.usdc_mint.to_account_info(),
+                system_program: ctx.accounts.system_program.to_account_info(),
+                token_program: ctx.accounts.token_program.to_account_info(),
+            },
+        ))?;
+
         Ok(())
     }
 
@@ -210,7 +224,24 @@ pub struct Initialize<'info> {
     pub user_account: Account<'info, UserAccount>,
     #[account(mut)]
     pub owner: Signer<'info>,
+    /// CHECK: This PDA is derived from the owner's key and only used as an authority. No data access occurs.
+    #[account(
+        mut,
+        seeds = [b"shrub", owner.key().as_ref()],
+        bump
+    )]
+    pub shrub_pda: AccountInfo<'info>,
+    #[account(
+        init,
+        payer = owner,
+        associated_token::mint = usdc_mint,
+        associated_token::authority = shrub_pda
+    )]
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
+    pub usdc_mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 #[derive(Accounts)]
@@ -219,7 +250,7 @@ pub struct DepositSolAndTakeLoan<'info> {
     pub user_account: Account<'info, UserAccount>,
     #[account(mut)]
     pub owner: Signer<'info>,
-    /// CHECK: This is not dangerous because we don't read or write from this account
+    /// CHECK: This is not dangerous because we don't read or write from this account. It is used as an authority for token operations.
     #[account(mut)]
     pub contract: UncheckedAccount<'info>,
     #[account(mut)]
@@ -241,7 +272,7 @@ pub struct RepayLoan<'info> {
     pub user_account: Account<'info, UserAccount>,
     #[account(mut)]
     pub owner: Signer<'info>,
-    /// CHECK: This is not dangerous because we don't read or write from this account
+    /// CHECK: This is not dangerous because we don't read or write from this account. It is used as an authority for token operations.
     #[account(mut)]
     pub contract: UncheckedAccount<'info>,
     #[account(mut)]

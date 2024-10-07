@@ -1,10 +1,10 @@
 import * as anchor from "@coral-xyz/anchor";
 import { expect } from 'chai';
 import { SolSavings } from "../target/types/sol_savings";
+import { TOKEN_PROGRAM_ID, createMint, getOrCreateAssociatedTokenAccount, mintTo, getAccount } from '@solana/spl-token';
 
 const { web3 } = anchor;
 const { SystemProgram } = web3;
-
 
 describe('sol-savings', () => {
   const provider = anchor.AnchorProvider.local();
@@ -12,23 +12,77 @@ describe('sol-savings', () => {
 
   const program = anchor.workspace.SolSavings as anchor.Program<SolSavings>
 
+  let shrubPda: anchor.web3.PublicKey;
+  let shrubBump: number;
   let userAccount: anchor.web3.Keypair;
   let adminAccount: anchor.web3.Keypair;
   let usdcMint: anchor.web3.PublicKey;
-  let contractUsdcAccount: anchor.web3.PublicKey;
+  let adminUsdcAccount: anchor.web3.PublicKey;
+  let shrubUsdcAccount: anchor.web3.PublicKey;
   let userUsdcAccount: anchor.web3.PublicKey;
 
   before(async () => {
     userAccount = anchor.web3.Keypair.generate();
     adminAccount = anchor.web3.Keypair.generate();
+
     // Airdrop SOL to user account
-    const latestBlockhash = await provider.connection.getLatestBlockhash();
-    const signature = await provider.connection.requestAirdrop(adminAccount.publicKey, 2000000000);
+    const latestBlockhashOne = await provider.connection.getLatestBlockhash();
+    const signatureOne = await provider.connection.requestAirdrop(adminAccount.publicKey, 2_000_000_000);
+    const latestBlockhashTwo = await provider.connection.getLatestBlockhash();
+    const signatureTwo = await provider.connection.requestAirdrop(userAccount.publicKey, 2_000_000_000);
     await provider.connection.confirmTransaction({
-      signature,
-      blockhash: latestBlockhash.blockhash,
-      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      signature: signatureOne,
+      blockhash: latestBlockhashOne.blockhash,
+      lastValidBlockHeight: latestBlockhashOne.lastValidBlockHeight,
     });
+    await provider.connection.confirmTransaction({
+      signature: signatureTwo,
+      blockhash: latestBlockhashTwo.blockhash,
+      lastValidBlockHeight: latestBlockhashTwo.lastValidBlockHeight,
+    });
+
+
+
+
+
+
+    // Derive PDA for Shrub (the program)
+    const shrubFindAddressArr = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("shrub"), adminAccount.publicKey.toBuffer()],
+      program.programId
+    );
+    shrubPda = shrubFindAddressArr[0];
+    shrubBump = shrubFindAddressArr[1];
+    usdcMint = await createMint(
+      provider.connection,
+      adminAccount,
+      adminAccount.publicKey,
+      null,
+      6 // 6 decimals for USDC
+    );
+    console.log('created mint');
+    adminUsdcAccount = (await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      adminAccount,
+      usdcMint,
+      adminAccount.publicKey
+    )).address;
+    console.log('admin Usdc');
+    userUsdcAccount = (await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      userAccount,
+      usdcMint,
+      userAccount.publicKey
+    )).address;
+    console.log('user Usdc');
+    shrubUsdcAccount = (await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      adminAccount,
+      usdcMint,
+      shrubPda
+    )).address;
+
+
   });
 
   it('accounts have the correct amount of SOL', async() => {
@@ -38,147 +92,39 @@ describe('sol-savings', () => {
     expect(userBalance).to.eq(0);
   });
 
-})
-
-
-// import * as anchor from "@project-serum/anchor";
-// import { Program } from "@project-serum/anchor";
-// import { SolSavings } from "../target/types/sol_savings";
-// import { TOKEN_PROGRAM_ID, createMint, getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
-// import { expect } from 'chai';
-
-// describe("sol-savings", () => {
-//   const provider = anchor.AnchorProvider.env();
-//   anchor.setProvider(provider);
-//
-//   const program = anchor.workspace.SolSavings as Program<SolSavings>;
-//
-//   let userAccount: anchor.web3.Keypair;
-//   let usdcMint: anchor.web3.PublicKey;
-//   let contractUsdcAccount: anchor.web3.PublicKey;
-//   let userUsdcAccount: anchor.web3.PublicKey;
-//
-//   before(async () => {
-//     userAccount = anchor.web3.Keypair.generate();
-//
-//     // Airdrop SOL to user account
-//     const signature = await provider.connection.requestAirdrop(userAccount.publicKey, 2000000000);
-//     await provider.connection.confirmTransaction(signature);
-//   });
-//
-//   it("Initializes user account", async () => {
-//     await program.methods.initialize()
-//       .accounts({
-//         userAccount: userAccount.publicKey,
-//         owner: userAccount.publicKey,
-//         systemProgram: anchor.web3.SystemProgram.programId,
-//       })
-//       .signers([userAccount])
-//       .rpc();
-//
-//     const account = await program.account.userAccount.fetch(userAccount.publicKey);
-//     expect(account.solBalance.toNumber()).to.equal(0);
-//     expect(account.usdcBalance.toNumber()).to.equal(0);
-//     expect(account.loanCount.toNumber()).to.equal(0);
-//   });
-//
-//   it("Deposits SOL", async () => {
-//     const depositAmount = new anchor.BN(1000000000); // 1 SOL
-//
-//     await program.methods.depositSol(depositAmount)
-//       .accounts({
-//         userAccount: userAccount.publicKey,
-//         owner: userAccount.publicKey,
-//         systemProgram: anchor.web3.SystemProgram.programId,
-//       })
-//       .signers([userAccount])
-//       .rpc();
-//
-//     const account = await program.account.userAccount.fetch(userAccount.publicKey);
-//     expect(account.solBalance.toNumber()).to.equal(1000000000);
-//   });
-//
-//   it("Creates USDC mint and contract account", async () => {
-//     usdcMint = await createMint(
-//       provider.connection,
-//       userAccount,
-//       userAccount.publicKey,
-//       null,
-//       6 // 6 decimal places for USDC
-//     );
-//
-//     contractUsdcAccount = (await getOrCreateAssociatedTokenAccount(
-//       provider.connection,
-//       userAccount,
-//       usdcMint,
-//       provider.wallet.publicKey
-//     )).address;
-//
-//     await mintTo(
-//       provider.connection,
-//       userAccount,
-//       usdcMint,
-//       contractUsdcAccount,
-//       userAccount,
-//       1000000000 // 1,000 USDC
-//     );
-//
-//     const mintInfo = await provider.connection.getParsedAccountInfo(usdcMint);
-//     expect(mintInfo.value).to.not.be.null;
-//   });
-//
-//   it("Takes a loan", async () => {
-//     const loanAmount = new anchor.BN(250000000); // 0.25 USDC (based on 25% LTV)
-//
-//     // Create user USDC account
-//     userUsdcAccount = (await getOrCreateAssociatedTokenAccount(
-//       provider.connection,
-//       userAccount,
-//       usdcMint,
-//       userAccount.publicKey
-//     )).address;
-//
-//     await program.methods.takeLoan(loanAmount)
-//       .accounts({
-//         userAccount: userAccount.publicKey,
-//         owner: userAccount.publicKey,
-//         contract: userAccount.publicKey,
-//         contractUsdcAccount: contractUsdcAccount,
-//         userUsdcAccount: userUsdcAccount,
-//         usdcMint: usdcMint,
-//         tokenProgram: TOKEN_PROGRAM_ID,
-//         systemProgram: anchor.web3.SystemProgram.programId,
-//       })
-//       .signers([userAccount])
-//       .rpc();
-//
-//     const account = await program.account.userAccount.fetch(userAccount.publicKey);
-//     expect(account.usdcBalance.toNumber()).to.equal(250000000);
-//     expect(account.solBalance.toNumber()).to.equal(750000000); // 1 SOL - 0.25 SOL collateral
-//     expect(account.loanCount.toNumber()).to.equal(1);
-//   });
-//
-//   it("Repays a loan", async () => {
-//     const repayAmount = new anchor.BN(250000000); // Full repayment
-//
-//     await program.methods.repayLoan(new anchor.BN(1), repayAmount)
-//       .accounts({
-//         userAccount: userAccount.publicKey,
-//         owner: userAccount.publicKey,
-//         contract: userAccount.publicKey,
-//         contractUsdcAccount: contractUsdcAccount,
-//         userUsdcAccount: userUsdcAccount,
-//         usdcMint: usdcMint,
-//         tokenProgram: TOKEN_PROGRAM_ID,
-//         systemProgram: anchor.web3.SystemProgram.programId,
-//       })
-//       .signers([userAccount])
-//       .rpc();
-//
-//     const account = await program.account.userAccount.fetch(userAccount.publicKey);
-//     expect(account.usdcBalance.toNumber()).to.equal(0);
-//     expect(account.solBalance.toNumber()).to.equal(1000000000); // Collateral returned
-//     expect(account.loanCount.toNumber()).to.equal(1);
-//     expect(account.loans.length).to.equal(0);
-//   });
-// });
+  // it('admin deposits 1M USDC', async () => {
+  //   // Set up the admin USDC account and mint
+  //   usdcMint = await createMint(
+  //     provider.connection,
+  //     adminAccount,
+  //     adminAccount.publicKey,
+  //     null,
+  //     6 // 6 decimals for USDC
+  //   );
+  //
+  //   // Mint 1,000,000 USDC to the admin's USDC account
+  //   await mintTo(
+  //     provider.connection,
+  //     adminAccount,
+  //     usdcMint,
+  //     adminUsdcAccount,
+  //     adminAccount,
+  //     1_000_000_000_000 // 1,000,000 USDC with 6 decimals
+  //   );
+  //
+  //   // Invoke the admin_deposit_usdc function
+  //   await program.methods.adminDepositUsdc(new anchor.BN(1_000_000_000_000))
+  //     .accounts({
+  //       admin: adminAccount.publicKey,
+  //       adminUsdcAccount: adminUsdcAccount,
+  //       contractUsdcAccount: shrubUsdcAccount,
+  //     })
+  //     .signers([adminAccount])
+  //     .rpc();
+  //
+  //   // Check the USDC balance of the contract's USDC account
+  //   const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
+  //   // const contractUsdcBalance = await provider.connection.getTokenAccountBalance(shrubUsdcAccount.address);
+  //   expect(shrubAccountInfo.amount).to.eq('1000000000000'); // 1,000,000 USDC
+  // });
+});
