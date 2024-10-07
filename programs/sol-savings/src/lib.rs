@@ -20,7 +20,7 @@ pub mod sol_savings {
         user_account.loan_count = 0;
         user_account.loans = vec![]; // Initialize loans as an empty vector
 
-        // Use the associated token program to create the Shrub PDA's USDC account
+        // Use the associated token program to create the shrub PDA's USDC account
         associated_token::create(CpiContext::new(
             ctx.accounts.associated_token_program.to_account_info(),
             associated_token::Create {
@@ -84,14 +84,14 @@ pub mod sol_savings {
             return Err(ErrorCode::InsufficientCollateral.into());
         }
 
-        // Transfer USDC from contract to user
+        // Transfer USDC from shrub to user
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 token::Transfer {
-                    from: ctx.accounts.contract_usdc_account.to_account_info(),
+                    from: ctx.accounts.shrub_usdc_account.to_account_info(),
                     to: ctx.accounts.user_usdc_account.to_account_info(),
-                    authority: ctx.accounts.contract.to_account_info(),
+                    authority: ctx.accounts.shrub_pda.to_account_info(),
                 },
             ),
             usdc_amount,
@@ -150,13 +150,13 @@ pub mod sol_savings {
             (loan.principal, interest, loan.collateral, total_owed)
         };
 
-        // Transfer USDC from user to contract
+        // Transfer USDC from user to shrub
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 token::Transfer {
                     from: ctx.accounts.user_usdc_account.to_account_info(),
-                    to: ctx.accounts.contract_usdc_account.to_account_info(),
+                    to: ctx.accounts.shrub_usdc_account.to_account_info(),
                     authority: ctx.accounts.owner.to_account_info(),
                 },
             ),
@@ -202,13 +202,13 @@ pub mod sol_savings {
     }
 
     pub fn admin_deposit_usdc(ctx: Context<AdminDepositUsdc>, usdc_amount: u64) -> Result<()> {
-        // Transfer USDC from admin to contract's USDC account
+        // Transfer USDC from admin to shrub's USDC account
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 token::Transfer {
                     from: ctx.accounts.admin_usdc_account.to_account_info(),
-                    to: ctx.accounts.contract_usdc_account.to_account_info(),
+                    to: ctx.accounts.shrub_usdc_account.to_account_info(),
                     authority: ctx.accounts.admin.to_account_info(),
                 },
             ),
@@ -252,9 +252,9 @@ pub struct DepositSolAndTakeLoan<'info> {
     pub owner: Signer<'info>,
     /// CHECK: This is not dangerous because we don't read or write from this account. It is used as an authority for token operations.
     #[account(mut)]
-    pub contract: UncheckedAccount<'info>,
+    pub shrub_pda: UncheckedAccount<'info>,
     #[account(mut)]
-    pub contract_usdc_account: Account<'info, TokenAccount>,
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_usdc_account: Account<'info, TokenAccount>,
     /// CHECK: This account is not being read or written to. We just pass it through to the Chainlink program.
@@ -274,9 +274,9 @@ pub struct RepayLoan<'info> {
     pub owner: Signer<'info>,
     /// CHECK: This is not dangerous because we don't read or write from this account. It is used as an authority for token operations.
     #[account(mut)]
-    pub contract: UncheckedAccount<'info>,
+    pub shrub_pda: UncheckedAccount<'info>,
     #[account(mut)]
-    pub contract_usdc_account: Account<'info, TokenAccount>,
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_usdc_account: Account<'info, TokenAccount>,
     pub usdc_mint: Account<'info, Mint>,
@@ -291,7 +291,7 @@ pub struct AdminDepositUsdc<'info> {
     #[account(mut)]
     pub admin_usdc_account: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub contract_usdc_account: Account<'info, TokenAccount>,
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
 
