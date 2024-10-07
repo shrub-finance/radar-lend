@@ -1,17 +1,15 @@
 use anchor_lang::prelude::*;
-use anchor_lang::context::CpiContext;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 use anchor_spl::associated_token::AssociatedToken;
-
+use chainlink_solana as chainlink;
 
 declare_id!("3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex");
 
-const SOL_PRICE_CENTS: u64 = 10000; // $100.00 USD
 const INITIAL_USDC_SUPPLY: u64 = 1_000_000_000_000; // 1,000,000 USDC (6 decimals)
 const SECONDS_IN_A_YEAR: u64 = 31_536_000; // 365 days in seconds
 
 #[program]
-pub mod sol_savings {
+pub mod sol_savings_with_chainlink {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
@@ -82,6 +80,13 @@ pub mod sol_savings {
         // Update SOL balance
         user_account.sol_balance += sol_amount;
 
+        // Fetch current SOL price in USD using Chainlink feed
+        let round = chainlink::latest_round_data(
+            ctx.accounts.chainlink_program.to_account_info(),
+            ctx.accounts.chainlink_feed.to_account_info(),
+        )?;
+        let sol_price = round.answer as u64; // Assume price is in cents
+
         // Validate the LTV and determine collateral required
         let (ltv_ratio, apy) = match ltv {
             20 => (20, 0),
@@ -92,7 +97,7 @@ pub mod sol_savings {
         };
 
         // Calculate required collateral based on LTV and SOL price
-        let required_collateral = (usdc_amount * 100) / (ltv_ratio as u64 * SOL_PRICE_CENTS / 10000);
+        let required_collateral = (usdc_amount * 100) / (ltv_ratio as u64 * sol_price / 10000);
 
         if user_account.sol_balance < required_collateral {
             return Err(ErrorCode::InsufficientCollateral.into());
@@ -271,6 +276,10 @@ pub struct DepositSolAndTakeLoan<'info> {
     pub contract_usdc_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub user_usdc_account: Account<'info, TokenAccount>,
+    /// CHECK: This account is not being read or written to. We just pass it through to the Chainlink program.
+    pub chainlink_feed: AccountInfo<'info>,
+    /// CHECK: This is the Chainlink program ID, which is a valid Solana program.
+    pub chainlink_program: AccountInfo<'info>,
     pub usdc_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
