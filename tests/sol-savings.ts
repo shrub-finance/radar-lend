@@ -32,7 +32,7 @@ describe('sol-savings', () => {
     userAccount = anchor.web3.Keypair.generate();
     adminAccount = anchor.web3.Keypair.generate();
 
-    // Airdrop SOL to user account
+    // Airdrop SOL to user and admin accounts
     const latestBlockhashOne = await provider.connection.getLatestBlockhash();
     const signatureOne = await provider.connection.requestAirdrop(adminAccount.publicKey, 2_000_000_000);
     const latestBlockhashTwo = await provider.connection.getLatestBlockhash();
@@ -48,9 +48,6 @@ describe('sol-savings', () => {
       lastValidBlockHeight: latestBlockhashTwo.lastValidBlockHeight,
     });
 
-
-
-
     // Derive PDA for Shrub (the program)
     const shrubFindAddressArr = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("shrub"), provider.wallet.publicKey.toBuffer()],
@@ -58,6 +55,8 @@ describe('sol-savings', () => {
     );
     shrubPda = shrubFindAddressArr[0];
     shrubBump = shrubFindAddressArr[1];
+
+    // Create USDC Mint and Associated Token Accounts
     usdcMint = await createMint(
       provider.connection,
       adminAccount,
@@ -65,30 +64,39 @@ describe('sol-savings', () => {
       null,
       6 // 6 decimals for USDC
     );
-    console.log('created mint');
+
     adminUsdcAccount = (await getOrCreateAssociatedTokenAccount(
       provider.connection,
       adminAccount,
       usdcMint,
       adminAccount.publicKey
     )).address;
-    console.log('admin Usdc');
+
     userUsdcAccount = (await getOrCreateAssociatedTokenAccount(
       provider.connection,
       userAccount,
       usdcMint,
       userAccount.publicKey
     )).address;
-    console.log('user Usdc');
+
     shrubUsdcAccount = await getAssociatedTokenAddress(
       usdcMint,
       shrubPda,
       true
     );
 
+    await program.methods.initialize()
+      .accounts({
+        userAccount: userAccount.publicKey,
+        owner: provider.wallet.publicKey,
+        usdcMint: usdcMint,
+      })
+      .signers([userAccount])
+      .rpc();
+
   });
 
-  it('accounts have the correct amount of SOL', async() => {
+  it('accounts have the correct amount of SOL', async () => {
     const adminBalance = await provider.connection.getBalance(adminAccount.publicKey);
     const userBalance = await provider.connection.getBalance(userAccount.publicKey);
     expect(adminBalance).to.be.lt(2000000000);
@@ -97,39 +105,42 @@ describe('sol-savings', () => {
     console.log(userBalance);
   });
 
-  // it('admin deposits 1M USDC', async () => {
-  //   // Set up the admin USDC account and mint
-  //   usdcMint = await createMint(
-  //     provider.connection,
-  //     adminAccount,
-  //     adminAccount.publicKey,
-  //     null,
-  //     6 // 6 decimals for USDC
-  //   );
-  //
-  //   // Mint 1,000,000 USDC to the admin's USDC account
-  //   await mintTo(
-  //     provider.connection,
-  //     adminAccount,
-  //     usdcMint,
-  //     adminUsdcAccount,
-  //     adminAccount,
-  //     1_000_000_000_000 // 1,000,000 USDC with 6 decimals
-  //   );
-  //
-  //   // Invoke the admin_deposit_usdc function
-  //   await program.methods.adminDepositUsdc(new anchor.BN(1_000_000_000_000))
-  //     .accounts({
-  //       admin: adminAccount.publicKey,
-  //       adminUsdcAccount: adminUsdcAccount,
-  //       contractUsdcAccount: shrubUsdcAccount,
-  //     })
-  //     .signers([adminAccount])
-  //     .rpc();
-  //
-  //   // Check the USDC balance of the contract's USDC account
-  //   const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
-  //   // const contractUsdcBalance = await provider.connection.getTokenAccountBalance(shrubUsdcAccount.address);
-  //   expect(shrubAccountInfo.amount).to.eq('1000000000000'); // 1,000,000 USDC
-  // });
+  it('admin deposits 1M USDC', async () => {
+    // Mint 1,000,000 USDC to the admin's USDC account
+    await mintTo(
+      provider.connection,
+      adminAccount,
+      usdcMint,
+      adminUsdcAccount,
+      adminAccount,
+      1_000_000_000_000 // 1,000,000 USDC with 6 decimals
+    );
+
+    // Confirm the admin USDC balance before deposit
+    let adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+    expect(adminAccountInfo.amount).to.equal(1_000_000_000_000n);
+
+    // Invoke the admin_deposit_usdc function to deposit 1,000,000 USDC to shrubUsdcAccount
+    console.log(`
+adminAccount: ${adminAccount.publicKey}
+adminUsdcAccount: ${adminUsdcAccount}
+shrubPda: ${shrubPda}
+shrubUsdcAccount: ${shrubUsdcAccount}
+    `)
+    await program.methods.adminDepositUsdc(new anchor.BN(1_000_000_000_000))
+      .accounts({
+        admin: adminAccount.publicKey,
+        adminUsdcAccount: adminUsdcAccount,
+        shrubUsdcAccount: shrubUsdcAccount,
+      })
+      .signers([adminAccount])
+      .rpc();
+
+    // Confirm the balances after deposit
+    adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+    expect(adminAccountInfo.amount).to.equal(0n);
+
+    const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
+    expect(shrubAccountInfo.amount).to.equal(1_000_000_000_000n); // 1,000,000 USDC
+  });
 });

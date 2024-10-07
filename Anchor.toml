@@ -4,7 +4,7 @@ skip-lint = false
 idl-build = ["anchor-spl/idl-build"]
 
 [programs.localnet]
-sol_savings = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
+sol_savings = "D98aQ7aQD32bMkzUrCv4W9TTbQ46TaZ6WEV9zgbLebmn"
 
 [programs.devnet]
 sol_savings = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
@@ -23,7 +23,7 @@ wallet = "~/.config/solana/id.json"
 test = "yarn ts-mocha -p tsconfig.json tests/**/*.ts"
 
 [test]
-startup_wait = 5000
+startup_wait = 500
 
 [workspace]
 types = "target/types/sol_savings"

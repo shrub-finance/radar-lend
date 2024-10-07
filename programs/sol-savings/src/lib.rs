@@ -3,7 +3,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount};
 use anchor_spl::associated_token::{self, AssociatedToken};
 use chainlink_solana as chainlink;
 
-declare_id!("3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex");
+declare_id!("D98aQ7aQD32bMkzUrCv4W9TTbQ46TaZ6WEV9zgbLebmn");
 
 const INITIAL_USDC_SUPPLY: u64 = 1_000_000_000_000; // 1,000,000 USDC (6 decimals)
 const SECONDS_IN_A_YEAR: u64 = 31_536_000; // 365 days in seconds
@@ -13,12 +13,9 @@ pub mod sol_savings {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let user_account = &mut ctx.accounts.user_account;
-        user_account.owner = ctx.accounts.owner.key();
-        user_account.sol_balance = 0;
-        user_account.usdc_balance = 0;
-        user_account.loan_count = 0;
-        user_account.loans = vec![]; // Initialize loans as an empty vector
+        let shrub_pda = &mut ctx.accounts.shrub_pda;
+        shrub_pda.owner = *ctx.accounts.owner.key;
+        shrub_pda.bump = ctx.bumps.shrub_pda; // Store the canonical bump
 
         // Use the associated token program to create the shrub PDA's USDC account
         associated_token::create(CpiContext::new(
@@ -220,17 +217,16 @@ pub mod sol_savings {
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = owner, space = 8 + 32 + 8 + 8 + 8 + 200)]
-    pub user_account: Account<'info, UserAccount>,
     #[account(mut)]
     pub owner: Signer<'info>,
-    /// CHECK: This PDA is derived from the owner's key and only used as an authority. No data access occurs.
     #[account(
-        mut,
+        init,
         seeds = [b"shrub", owner.key().as_ref()],
-        bump
+        bump,
+        payer = owner,
+        space = 8 + ShrubPda::INIT_SPACE
     )]
-    pub shrub_pda: AccountInfo<'info>,
+    pub shrub_pda: Account<'info, ShrubPda>,
     #[account(
         init,
         payer = owner,
@@ -293,6 +289,13 @@ pub struct AdminDepositUsdc<'info> {
     #[account(mut)]
     pub shrub_usdc_account: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct ShrubPda {
+    pub owner: Pubkey,
+    pub bump: u8,
 }
 
 #[account]
