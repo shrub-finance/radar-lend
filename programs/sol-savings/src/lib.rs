@@ -22,39 +22,6 @@ pub mod sol_savings_with_chainlink {
         Ok(())
     }
 
-    pub fn withdraw_sol(ctx: Context<WithdrawSol>, amount: u64) -> Result<()> {
-        let user_account = &mut ctx.accounts.user_account;
-        let owner = &ctx.accounts.owner;
-
-        if user_account.sol_balance < amount {
-            return Err(ErrorCode::InsufficientFunds.into());
-        }
-
-        // Transfer SOL from program account to owner
-        **user_account.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **owner.to_account_info().try_borrow_mut_lamports()? += amount;
-
-        // Update the SOL balance
-        user_account.sol_balance -= amount;
-        Ok(())
-    }
-
-    pub fn create_usdc_mint(ctx: Context<CreateUsdcMint>) -> Result<()> {
-        // Mint initial USDC supply to the contract's token account
-        token::mint_to(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                token::MintTo {
-                    mint: ctx.accounts.usdc_mint.to_account_info(),
-                    to: ctx.accounts.contract_usdc_account.to_account_info(),
-                    authority: ctx.accounts.contract.to_account_info(),
-                },
-            ),
-            INITIAL_USDC_SUPPLY,
-        )?;
-        Ok(())
-    }
-
     pub fn deposit_sol_and_take_loan(
         ctx: Context<DepositSolAndTakeLoan>,
         sol_amount: u64,
@@ -219,6 +186,22 @@ pub mod sol_savings_with_chainlink {
 
         Ok(())
     }
+
+    pub fn admin_deposit_usdc(ctx: Context<AdminDepositUsdc>, usdc_amount: u64) -> Result<()> {
+        // Transfer USDC from admin to contract's USDC account
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                token::Transfer {
+                    from: ctx.accounts.admin_usdc_account.to_account_info(),
+                    to: ctx.accounts.contract_usdc_account.to_account_info(),
+                    authority: ctx.accounts.admin.to_account_info(),
+                },
+            ),
+            usdc_amount,
+        )?;
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -228,39 +211,6 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct WithdrawSol<'info> {
-    #[account(mut, has_one = owner)]
-    pub user_account: Account<'info, UserAccount>,
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct CreateUsdcMint<'info> {
-    #[account(mut)]
-    pub contract: Signer<'info>,
-    #[account(
-        init,
-        payer = contract,
-        mint::decimals = 6,
-        mint::authority = contract.key(),
-    )]
-    pub usdc_mint: Account<'info, Mint>,
-    #[account(
-        init,
-        payer = contract,
-        associated_token::mint = usdc_mint,
-        associated_token::authority = contract,
-    )]
-    pub contract_usdc_account: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
@@ -301,6 +251,17 @@ pub struct RepayLoan<'info> {
     pub usdc_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AdminDepositUsdc<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(mut)]
+    pub admin_usdc_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub contract_usdc_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[account]

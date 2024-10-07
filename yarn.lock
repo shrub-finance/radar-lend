@@ -243,10 +243,10 @@
     "@solana/codecs" "2.0.0-rc.1"
     "@solana/spl-type-length-value" "0.1.0"
 
-"@solana/spl-token@^0.3.11":
-  version "0.3.11"
-  resolved "https://registry.yarnpkg.com/@solana/spl-token/-/spl-token-0.3.11.tgz#cdc10f9472b29b39c8983c92592cadd06627fb9a"
-  integrity sha512-bvohO3rIMSVL24Pb+I4EYTJ6cL82eFpInEXD/I8K8upOGjpqHsKUoAempR/RnUlI1qSFNyFlWJfu6MNUgfbCQQ==
+"@solana/spl-token@^0.4.8":
+  version "0.4.8"
+  resolved "https://registry.yarnpkg.com/@solana/spl-token/-/spl-token-0.4.8.tgz#a84e4131af957fa9fbd2727e5fc45dfbf9083586"
+  integrity sha512-RO0JD9vPRi4LsAbMUdNbDJ5/cv2z11MGhtAvFeRzT4+hAGE/FUzRi0tkkWtuCfSIU3twC6CtmAihRp/+XXjWsA==
   dependencies:
     "@solana/buffer-layout" "^4.0.0"
     "@solana/buffer-layout-utils" "^0.2.0"
