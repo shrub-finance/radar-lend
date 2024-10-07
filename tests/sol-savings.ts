@@ -13,15 +13,17 @@ describe('sol-savings', () => {
   const program = anchor.workspace.SolSavings as anchor.Program<SolSavings>
 
   let userAccount: anchor.web3.Keypair;
+  let adminAccount: anchor.web3.Keypair;
   let usdcMint: anchor.web3.PublicKey;
   let contractUsdcAccount: anchor.web3.PublicKey;
   let userUsdcAccount: anchor.web3.PublicKey;
 
   before(async () => {
     userAccount = anchor.web3.Keypair.generate();
+    adminAccount = anchor.web3.Keypair.generate();
     // Airdrop SOL to user account
     const latestBlockhash = await provider.connection.getLatestBlockhash();
-    const signature = await provider.connection.requestAirdrop(userAccount.publicKey, 2000000000);
+    const signature = await provider.connection.requestAirdrop(adminAccount.publicKey, 2000000000);
     await provider.connection.confirmTransaction({
       signature,
       blockhash: latestBlockhash.blockhash,
@@ -29,10 +31,12 @@ describe('sol-savings', () => {
     });
   });
 
-  it('userAccount has the correct amount of SOL', async() => {
-    const balance = await provider.connection.getBalance(userAccount.publicKey);
-    expect(balance).to.eq(2000000000);
-  })
+  it('accounts have the correct amount of SOL', async() => {
+    const adminBalance = await provider.connection.getBalance(adminAccount.publicKey);
+    const userBalance = await provider.connection.getBalance(userAccount.publicKey);
+    expect(adminBalance).to.eq(2000000000);
+    expect(userBalance).to.eq(0);
+  });
 
 })
 

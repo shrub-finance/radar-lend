@@ -9,7 +9,7 @@ const INITIAL_USDC_SUPPLY: u64 = 1_000_000_000_000; // 1,000,000 USDC (6 decimal
 const SECONDS_IN_A_YEAR: u64 = 31_536_000; // 365 days in seconds
 
 #[program]
-pub mod sol_savings_with_chainlink {
+pub mod sol_savings {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
