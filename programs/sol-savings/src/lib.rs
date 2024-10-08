@@ -1,356 +1,296 @@
 use anchor_lang::prelude::*;
-use anchor_lang::context::CpiContext;
+use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
-use anchor_spl::associated_token::{AssociatedToken};
 
-declare_id!("3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex");
-
-const SOL_PRICE_CENTS: u64 = 10000; // $100.00 USD
-const INITIAL_USDC_SUPPLY: u64 = 1_000_000_000_000; // 1,000,000 USDC with 6 decimal places
-const SECONDS_IN_A_YEAR: u64 = 31_536_000; // 365 days
+declare_id!("4aXgVPzHdoVsKSZWS4op4oHTHHqrFHkkpV93NshquE6L");
 
 #[program]
-pub mod sol_savings {
+pub mod radar_lend {
     use super::*;
 
+    const SOL_PRICE_USD: u64 = 100_000_000; // Hard-coded SOL price in USDC (100 USDC per SOL)
+    const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
+
+    /// Initializes the Shrub PDA and its associated USDC token account.
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let user_account = &mut ctx.accounts.user_account;
-        user_account.owner = ctx.accounts.owner.key();
-        user_account.sol_balance = 0;
-        user_account.usdc_balance = 0;
-        user_account.loan_count = 0;
+        let account_data = &mut ctx.accounts.pda_account;
+        account_data.user = *ctx.accounts.admin.key;
+        account_data.admin = *ctx.accounts.admin.key;
+        account_data.bump = ctx.bumps.pda_account;
+        account_data.loans = Vec::new(); // Initialize the loans vector
+        msg!("Initialized PDA with user: {}", account_data.user);
+        msg!("Admin: {}", account_data.admin);
+        msg!("PDA bump: {}", account_data.bump);
         Ok(())
     }
 
-    pub fn withdraw_sol(ctx: Context<WithdrawSol>, amount: u64) -> Result<()> {
-        let user_account = &mut ctx.accounts.user_account;
-        let owner = &ctx.accounts.owner;
-
-        if user_account.sol_balance < amount {
-            return Err(ErrorCode::InsufficientFunds.into());
-        }
-
-        // Transfer SOL from program account to owner
-        **user_account.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **owner.to_account_info().try_borrow_mut_lamports()? += amount;
-
-        // Update balance
-        user_account.sol_balance -= amount;
-        Ok(())
-    }
-
-    pub fn create_usdc_mint(ctx: Context<CreateUsdcMint>) -> Result<()> {
-        // Mint initial USDC supply to the contract's token account
-        token::mint_to(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                token::MintTo {
-                    mint: ctx.accounts.usdc_mint.to_account_info(),
-                    to: ctx.accounts.contract_usdc_account.to_account_info(),
-                    authority: ctx.accounts.contract.to_account_info(),
-                },
-            ),
-            INITIAL_USDC_SUPPLY,
-        )?;
-
-        Ok(())
-    }
-
-    pub fn deposit_sol_and_take_loan(
-        ctx: Context<DepositSolAndTakeLoan>,
-        sol_amount: u64,
-        usdc_amount: u64,
-        ltv: u8
+    /// Allows users to take a loan by specifying principal, APY, and collateral.
+    pub fn take_loan(
+        ctx: Context<TakeLoan>,
+        principal: u64,  // Amount of USDC to borrow (in micro units, i.e., 6 decimals)
+        apy: u16,        // Annual Percentage Yield in basis points (bps)
+        collateral: u64, // Amount of SOL to collateralize (in lamports)
     ) -> Result<()> {
-        let user_account = &mut ctx.accounts.user_account;
-        let owner = &ctx.accounts.owner;
+        // Define allowed APY:LTV pairs (APY in bps, LTV in bps)
+        let allowed_pairs = vec![
+            (800u16, 5000u64), // 80% LTV
+            (500u16, 3300u64), // 33% LTV
+            (100u16, 2500u64), // 25% LTV
+            (0u16, 2000u64),   // 20% LTV
+        ];
 
-        // Transfer SOL from owner to program account
-        anchor_lang::solana_program::program::invoke(
-            &anchor_lang::solana_program::system_instruction::transfer(
-                &owner.key(),
-                &user_account.key(),
-                sol_amount,
-            ),
-            &[
-                owner.to_account_info(),
-                user_account.to_account_info(),
-            ],
-        )?;
+        // Find the LTV corresponding to the provided APY
+        let ltv = allowed_pairs
+            .iter()
+            .find(|&&(allowed_apy, _)| allowed_apy == apy)
+            .map(|&(_, ltv)| ltv)
+            .ok_or(ErrorCode::InvalidAPY)?;
 
-        // Update SOL balance
-        user_account.sol_balance += sol_amount;
+        // Convert SOL price to micro-USDC (6 decimals) representation.
+        // Calculate required collateral in lamports using integer arithmetic:
+        // Formula: required_collateral_lamports = (principal * LAMPORTS_PER_SOL * 10_000) / (ltv * SOL_PRICE_USD)
+        let required_collateral_lamports = (principal as u128)
+            .checked_mul(LAMPORTS_PER_SOL as u128)
+            .and_then(|val| val.checked_mul(10_000))
+            .and_then(|val| val.checked_div((ltv as u128).checked_mul(SOL_PRICE_USD as u128).unwrap()))
+            .ok_or(ErrorCode::InsufficientCollateral)?;
 
-        // Calculate required collateral based on LTV
-        let (ltv_ratio, apy) = match ltv {
-            20 => (20, 0),
-            25 => (25, 1),
-            33 => (33, 5),
-            50 => (50, 8),
-            _ => return Err(ErrorCode::InvalidLTV.into()),
-        };
+        let required_collateral_lamports_u64 = required_collateral_lamports as u64;
 
-        let required_collateral = (usdc_amount * 100) / (ltv_ratio * SOL_PRICE_CENTS / 10000);
+        msg!("collateral: {}", collateral);
+        msg!("required_collateral_lamports_u64: {}", required_collateral_lamports_u64);
 
-        if user_account.sol_balance < required_collateral {
+        // Verify that the provided collateral meets or exceeds the required collateral
+        if collateral < required_collateral_lamports_u64 {
             return Err(ErrorCode::InsufficientCollateral.into());
         }
 
-        // Transfer USDC from contract to user
+        // Transfer SOL from the user to the PDA
+        let transfer_sol_ix = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.user.key(),
+            &ctx.accounts.pda_account.key(),
+            collateral,
+        );
+        anchor_lang::solana_program::program::invoke(
+            &transfer_sol_ix,
+            &[
+                ctx.accounts.user.to_account_info(),
+                ctx.accounts.pda_account.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+        )?;
+
+        // Transfer USDC from the Shrub's USDC account to the user's USDC account
+        // Since the PDA is the authority, we need to sign with PDA's seeds
+        let seeds = &[b"shrub", ctx.accounts.admin.key.as_ref(), &[ctx.accounts.pda_account.bump]];
+        let signer_seeds = &[&seeds[..]];
+
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 token::Transfer {
-                    from: ctx.accounts.contract_usdc_account.to_account_info(),
+                    from: ctx.accounts.shrub_usdc_account.to_account_info(),
                     to: ctx.accounts.user_usdc_account.to_account_info(),
-                    authority: ctx.accounts.contract.to_account_info(),
+                    authority: ctx.accounts.pda_account.to_account_info(),
                 },
-            ),
-            usdc_amount,
+            )
+                .with_signer(signer_seeds),
+            principal,
         )?;
 
-        // Create loan
-        user_account.loan_count += 1;
+        // Record the loan details
+        let loan_id = ctx.accounts.pda_account.loans.len() as u64 + 1;
         let loan = Loan {
-            id: user_account.loan_count,
-            start_date: Clock::get()?.unix_timestamp,
-            principal: usdc_amount,
+            id: loan_id,
+            principal,
             apy,
-            collateral: required_collateral,
-            ltv,
+            collateral,
+            created_at: Clock::get()?.unix_timestamp,
         };
+        let account_data = &mut ctx.accounts.pda_account;
+        account_data.loans.push(loan);
 
-        // Add the loan after all other mutations are done to avoid borrowing conflicts
-        user_account.loans.push(loan);
-
-        // Update balances
-        user_account.sol_balance -= required_collateral;
-        user_account.usdc_balance += usdc_amount;
-
-        emit!(LoanCreated {
-            loan_id: user_account.loan_count,
-            borrower: ctx.accounts.owner.key(),
-            usdc_amount,
-            collateral: required_collateral,
-            ltv,
-            apy,
-        });
+        // Emit a LoanTaken event
+        emit!(LoanTaken {
+        loan_id,
+        borrower: ctx.accounts.user.key(),
+        principal,
+        apy,
+        collateral,
+    });
 
         Ok(())
     }
 
-    pub fn repay_loan(ctx: Context<RepayLoan>, loan_id: u64, usdc_amount: u64) -> Result<()> {
-        let user_account = &mut ctx.accounts.user_account;
-        
-        // Find the loan index
-        let loan_index = user_account.loans.iter().position(|loan| loan.id == loan_id)
-            .ok_or(ErrorCode::LoanNotFound)?;
 
-        let (principal, interest, collateral, total_owed) = {
-            // First mutable borrow to access the loan
-            let loan = &mut user_account.loans[loan_index];
+    /// Allows the admin to deposit USDC into the shrub's USDC account.
+    pub fn deposit_usdc(ctx: Context<DepositUsdc>, amount: u64) -> Result<()> {
+        msg!("Starting deposit_usdc instruction");
 
-            let duration = Clock::get()?.unix_timestamp - loan.start_date;
-            let interest = (duration as u64 * loan.apy as u64 * loan.principal) / (SECONDS_IN_A_YEAR * 100);
-            let total_owed = loan.principal + interest;
-
-            if usdc_amount > total_owed {
-                return Err(ErrorCode::RepaymentAmountTooHigh.into());
-            }
-
-            (loan.principal, interest, loan.collateral, total_owed)
-        };
-
-        // Transfer USDC from user to contract
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 token::Transfer {
-                    from: ctx.accounts.user_usdc_account.to_account_info(),
-                    to: ctx.accounts.contract_usdc_account.to_account_info(),
-                    authority: ctx.accounts.owner.to_account_info(),
+                    from: ctx.accounts.admin_usdc_account.to_account_info(),
+                    to: ctx.accounts.shrub_usdc_account.to_account_info(),
+                    authority: ctx.accounts.admin.to_account_info(),
                 },
             ),
-            usdc_amount,
+            amount,
         )?;
 
-        // Update balances
-        user_account.usdc_balance -= usdc_amount;
-
-        // Check if loan is fully repaid and handle collateral
-        if usdc_amount == total_owed {
-            // Loan fully repaid, return collateral
-            user_account.sol_balance += collateral;
-
-            // Remove the loan from the loans list
-            user_account.loans.remove(loan_index);
-
-            emit!(LoanRepaid {
-                loan_id,
-                borrower: ctx.accounts.owner.key(),
-                usdc_amount,
-                collateral_returned: collateral,
-                interest_paid: interest,
-            });
-        } else {
-            // Partial repayment
-            let remaining = total_owed - usdc_amount;
-            let remaining_principal = if remaining > interest { remaining - interest } else { 0 };
-            let interest_paid = usdc_amount.saturating_sub(principal - remaining_principal);
-
-            // Update loan
-            let loan = &mut user_account.loans[loan_index];
-            loan.principal = remaining_principal;
-            loan.start_date = Clock::get()?.unix_timestamp;
-
-            emit!(PartialRepayment {
-                loan_id,
-                borrower: ctx.accounts.owner.key(),
-                usdc_amount,
-                remaining_principal,
-                interest_paid,
-            });
-        }
-
+        msg!("Admin deposited {} USDC to Shrub's account", amount);
         Ok(())
     }
 }
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(init, payer = owner, space = 8 + 32 + 8 + 8 + 8 + 200)]
-    pub user_account: Account<'info, UserAccount>,
+    /// The admin who initializes the PDA.
     #[account(mut)]
-    pub owner: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+    pub admin: Signer<'info>,
 
-#[derive(Accounts)]
-pub struct WithdrawSol<'info> {
-    #[account(mut, has_one = owner)]
-    pub user_account: Account<'info, UserAccount>,
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct CreateUsdcMint<'info> {
-    #[account(mut)]
-    pub contract: Signer<'info>,
+    /// The PDA account to be initialized.
     #[account(
         init,
-        payer = contract,
-        mint::decimals = 6,
-        mint::authority = contract.key(),
+        seeds = [b"shrub", admin.key().as_ref()],
+        bump,
+        payer = admin,
+        space = 8 + DataAccount::INIT_SPACE,
     )]
-    pub usdc_mint: Account<'info, Mint>,
+    pub pda_account: Account<'info, DataAccount>,
+
+    /// The Shrub PDA's associated USDC token account.
     #[account(
-        init,
-        payer = contract,
+        init_if_needed,
+        payer = admin,
         associated_token::mint = usdc_mint,
-        associated_token::authority = contract,
+        associated_token::authority = pda_account,
     )]
-    pub contract_usdc_account: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
+
+    /// The USDC mint.
+    pub usdc_mint: Account<'info, Mint>,
+
+    /// System program.
     pub system_program: Program<'info, System>,
+
+    /// Token program.
+    pub token_program: Program<'info, Token>,
+
+    /// Associated token program.
+    pub associated_token_program: Program<'info, AssociatedToken>,
+
+    /// Rent sysvar.
     pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
-pub struct DepositSolAndTakeLoan<'info> {
-    #[account(mut, has_one = owner)]
-    pub user_account: Account<'info, UserAccount>,
+pub struct TakeLoan<'info> {
+    /// The PDA account.
+    #[account(
+        mut,
+        has_one = admin,
+        seeds = [b"shrub", admin.key().as_ref()],
+        bump = pda_account.bump
+    )]
+    pub pda_account: Account<'info, DataAccount>,
+
+    /// The admin account (used for deriving PDA).
+    /// CHECK: This is not used for data validation; it is only used for PDA derivation.
+    pub admin: AccountInfo<'info>,
+
+    /// The user taking the loan.
     #[account(mut)]
-    pub owner: Signer<'info>,
-    /// CHECK: This is not dangerous because we don't read or write from this account
-    #[account(mut)]
-    pub contract: UncheckedAccount<'info>,
-    #[account(mut)]
-    pub contract_usdc_account: Account<'info, TokenAccount>,
+    pub user: Signer<'info>,
+
+    /// The user's associated USDC token account.
     #[account(mut)]
     pub user_usdc_account: Account<'info, TokenAccount>,
+
+    /// The Shrub PDA's associated USDC token account.
+    #[account(mut)]
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
+
+    /// The USDC mint.
     pub usdc_mint: Account<'info, Mint>,
-    pub token_program: Program<'info, Token>,
+
+    /// System program.
     pub system_program: Program<'info, System>,
+
+    /// Token program.
+    pub token_program: Program<'info, Token>,
+
+    /// Associated token program.
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 #[derive(Accounts)]
-pub struct RepayLoan<'info> {
-    #[account(mut, has_one = owner)]
-    pub user_account: Account<'info, UserAccount>,
+pub struct DepositUsdc<'info> {
+    /// The admin account.
     #[account(mut)]
-    pub owner: Signer<'info>,
-    /// CHECK: This is not dangerous because we don't read or write from this account
+    pub admin: Signer<'info>,
+
+    /// The admin's USDC token account.
     #[account(mut)]
-    pub contract: UncheckedAccount<'info>,
+    pub admin_usdc_account: Account<'info, TokenAccount>,
+
+    /// The Shrub PDA's associated USDC token account.
     #[account(mut)]
-    pub contract_usdc_account: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub user_usdc_account: Account<'info, TokenAccount>,
-    pub usdc_mint: Account<'info, Mint>,
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
+
+    /// Token program.
     pub token_program: Program<'info, Token>,
-    pub system_program: Program<'info, System>,
 }
 
+/// The PDA account structure.
 #[account]
-pub struct UserAccount {
-    pub owner: Pubkey,
-    pub sol_balance: u64,
-    pub usdc_balance: u64,
-    pub loan_count: u64,
-    pub loans: Vec<Loan>,
+pub struct DataAccount {
+    pub user: Pubkey,      // Owner of the PDA
+    pub admin: Pubkey,     // Admin of the PDA
+    pub bump: u8,          // Bump for PDA derivation
+    pub loans: Vec<Loan>,  // List of loans
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
+impl DataAccount {
+    /// Space required for the DataAccount:
+    /// - user: 32 bytes
+    /// - admin: 32 bytes
+    /// - bump: 1 byte
+    /// - loans: 4 bytes (vector length) + 40 bytes * 10 loans
+    /// Total: 32 + 32 + 1 + 4 + 400 = 469 bytes
+    const INIT_SPACE: usize = 32 + 32 + 1 + 4 + 40 * 10;
+}
+
+/// Represents an individual loan.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct Loan {
-    pub id: u64,
-    pub start_date: i64,
-    pub principal: u64,
-    pub apy: u8,
-    pub collateral: u64,
-    pub ltv: u8,
+    pub id: u64,          // Unique loan identifier
+    pub principal: u64,   // Amount of USDC borrowed
+    pub apy: u16,         // Annual Percentage Yield in basis points
+    pub collateral: u64,  // Amount of SOL collateralized
+    pub created_at: i64,  // Timestamp when the loan was created
 }
 
+/// Custom error types.
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Insufficient funds for withdrawal")]
-    InsufficientFunds,
-    #[msg("Insufficient collateral for loan")]
+    #[msg("Bump not found")]
+    BumpNotFound,
+
+    #[msg("Invalid APY provided")]
+    InvalidAPY,
+
+    #[msg("Insufficient collateral provided")]
     InsufficientCollateral,
-    #[msg("Loan not found")]
-    LoanNotFound,
-    #[msg("Repayment amount exceeds loan principal")]
-    RepaymentAmountTooHigh,
-    #[msg("Invalid LTV ratio")]
-    InvalidLTV,
 }
 
+/// Event emitted when a loan is taken.
 #[event]
-pub struct LoanCreated {
+pub struct LoanTaken {
     pub loan_id: u64,
     pub borrower: Pubkey,
-    pub usdc_amount: u64,
+    pub principal: u64,
+    pub apy: u16,
     pub collateral: u64,
-    pub ltv: u8,
-    pub apy: u8,
-}
-
-#[event]
-pub struct LoanRepaid {
-    pub loan_id: u64,
-    pub borrower: Pubkey,
-    pub usdc_amount: u64,
-    pub collateral_returned: u64,
-    pub interest_paid: u64,
-}
-
-#[event]
-pub struct PartialRepayment {
-    pub loan_id: u64,
-    pub borrower: Pubkey,
-    pub usdc_amount: u64,
-    pub remaining_principal: u64,
-    pub interest_paid: u64,
 }
