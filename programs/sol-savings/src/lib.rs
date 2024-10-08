@@ -14,7 +14,7 @@ pub mod radar_lend {
     /// Initializes the Shrub PDA and its associated USDC token account.
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let account_data = &mut ctx.accounts.pda_account;
-        account_data.user = *ctx.accounts.user.key;
+        account_data.user = *ctx.accounts.admin.key;
         account_data.bump = ctx.bumps.pda_account;
         msg!("Initialized PDA with user: {}", account_data.user);
         msg!("PDA bump: {}", account_data.bump);
@@ -29,8 +29,6 @@ pub mod radar_lend {
         collateral: u64, // Amount of SOL to collateralize
     ) -> Result<()> {
         {
-            let account_data = &mut ctx.accounts.pda_account;
-
             // Define allowed APY:LTV pairs (APY in bps, LTV in bps)
             let allowed_pairs = vec![
                 (800u16, 5000u64),
@@ -122,14 +120,14 @@ pub mod radar_lend {
 pub struct Initialize<'info> {
     /// The user who initializes the PDA.
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub admin: Signer<'info>,
 
     /// The PDA account to be initialized.
     #[account(
         init,
-        seeds = [b"shrub", user.key().as_ref()],
+        seeds = [b"shrub", admin.key().as_ref()],
         bump,
-        payer = user,
+        payer = admin,
         space = 8 + DataAccount::INIT_SPACE,
     )]
     pub pda_account: Account<'info, DataAccount>,
@@ -137,7 +135,7 @@ pub struct Initialize<'info> {
     /// The Shrub PDA's associated USDC token account.
     #[account(
         init,
-        payer = user,
+        payer = admin,
         associated_token::mint = usdc_mint,
         associated_token::authority = pda_account,
     )]

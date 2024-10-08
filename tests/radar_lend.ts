@@ -123,7 +123,7 @@ systemProgram: ${web3.SystemProgram.programId}
     `)
       await program.methods.initialize()
         .accounts({
-          user: adminAccount.publicKey,
+          admin: adminAccount.publicKey,
           pdaAccount: shrubPda,
           systemProgram: web3.SystemProgram.programId,
           shrubUsdcAccount,
