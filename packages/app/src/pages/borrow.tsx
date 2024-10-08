@@ -1,9 +1,8 @@
 import type { NextPage } from "next";
 import Head from "next/head";
 import {BorrowView} from "../views/borrow/BorrowView";
-// import { BorrowDurationView } from "@/views/borrow/BorrowDurationView";
-// import { BorrowSummaryView } from "@/views/borrow/BorrowSummaryView";
 import { SetStateAction, useState} from "react";
+import {BorrowSummaryView} from "../views/borrow/BorrowSummaryView";
 
 
 const Borrow: NextPage = (props) => {
@@ -56,25 +55,19 @@ const Borrow: NextPage = (props) => {
             setRequiredCollateral={setRequiredCollateral}
           />
         )}
-        {/*{borrowView === "duration" && (*/}
-        {/*  <BorrowDurationView*/}
-        {/*    requiredCollateral={requiredCollateral}*/}
-        {/*    onDurationChange={handleTimestampChange}*/}
-        {/*    onBackDuration={handleBorrowScreensBackButtons}*/}
-        {/*  />*/}
-        {/*)}*/}
-        {/*{borrowView === "summary" && (*/}
-        {/*  <BorrowSummaryView*/}
-        {/*    timestamp={timestamp}*/}
-        {/*    requiredCollateral={requiredCollateral}*/}
-        {/*    // @ts-ignore*/}
-        {/*    interestRate={interestRate}*/}
-        {/*    // @ts-ignore*/}
-        {/*    amount={amount}*/}
-        {/*    backtoBorrowDuration={handleBorrowScreensBackButtons}*/}
-        {/*    onCancel={handleCancel}*/}
-        {/*  />*/}
-        {/*)}*/}
+        {borrowView === "summary" && (
+          <BorrowSummaryView
+            timestamp={timestamp}
+            // @ts-ignore
+            requiredCollateral={requiredCollateral}
+            // @ts-ignore
+            interestRate={interestRate}
+            // @ts-ignore
+            amount={amount}
+            backtoBorrowDuration={handleBorrowScreensBackButtons}
+            onCancel={handleCancel}
+          />
+        )}
       </div>
     </>
   );

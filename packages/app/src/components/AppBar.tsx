@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import NavElement from "./nav-element";
 import Image from "next/image";
-import ConnectButton from "./ConnectButton";
-import { useWallet } from '@solana/wallet-adapter-react';
 import {clusterApiUrl, Connection} from "@solana/web3.js";
 
 export const AppBar: React.FC = () => {
@@ -16,32 +14,37 @@ export const AppBar: React.FC = () => {
   };
 
   const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
-
-
     const [isConnected, setIsConnected] = useState(false);
 
-    useEffect(() => {
-      // Listen for wallet connection status
+  useEffect(() => {
+    // Check if the Solana provider (e.g., Phantom) is available
+    if (window.solana && window.solana.isPhantom) {
+      // Listen for the wallet connection event
       window.solana.on("connect", () => {
         setIsConnected(true);
-        console.log("Connected:", window.solana.publicKey.toString());
+        console.log("Wallet connected:", window.solana.publicKey.toString());
       });
 
+      // Listen for wallet disconnection
       window.solana.on("disconnect", () => {
         setIsConnected(false);
-        console.log("Disconnected");
+        console.log("Wallet disconnected");
       });
+    } else {
+      console.log("Solana wallet not found. Please install Phantom or another provider.");
+    }
 
-      // Try connecting automatically if trusted
-      window.solana.connect({ onlyIfTrusted: true }).then(() => {
-        if (window.solana.isConnected) {
-          setIsConnected(true);
-          getBalance();
-        }
-      });
-    }, []);
+    // Cleanup listeners on unmount
+    return () => {
+      if (window.solana && window.solana.isPhantom) {
+        window.solana.off("connect");
+        window.solana.off("disconnect");
+      }
+    };
+  }, []);
 
-    // Get wallet balance
+
+  // Get wallet balance
     async function getBalance() {
       const balance = await connection.getBalance(window.solana.publicKey);
       console.log("Balance:", balance / 1e9, "SOL");
