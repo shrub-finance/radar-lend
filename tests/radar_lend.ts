@@ -7,7 +7,8 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo,
   getAccount,
-  getAssociatedTokenAddress
+  getAssociatedTokenAddress,
+  transferChecked
 } from '@solana/spl-token';
 
 const { web3 } = anchor;
@@ -101,31 +102,69 @@ programId: ${program.programId}
 
   });
 
-  it('accounts have the correct amount of SOL', async () => {
-    const adminBalance = await provider.connection.getBalance(adminAccount.publicKey);
-    const userBalance = await provider.connection.getBalance(userAccount.publicKey);
-    expect(adminBalance).to.be.lt(2000000000);
-    expect(adminBalance).to.be.gt(0);
-    console.log(adminBalance);
-    console.log(userBalance);
-  });
+  describe('basics', async () => {
+    it('accounts have the correct amount of SOL', async () => {
+      const adminBalance = await provider.connection.getBalance(adminAccount.publicKey);
+      const userBalance = await provider.connection.getBalance(userAccount.publicKey);
+      expect(adminBalance).to.be.lt(2000000000);
+      expect(adminBalance).to.be.gt(0);
+      console.log(adminBalance);
+      console.log(userBalance);
+    });
 
-  it('initializes', async () => {
-    console.log(`
+    it('initializes', async () => {
+      console.log(`
 program: ${program.programId}
 user: ${adminAccount.publicKey}
 pdaAccount: ${shrubPda}
 systemProgram: ${web3.SystemProgram.programId}
     `)
-    await program.methods.initialize()
-      .accounts({
-        user: adminAccount.publicKey,
-        pdaAccount: shrubPda,
-        systemProgram: web3.SystemProgram.programId
-      })
-      .signers([adminAccount])
-      .rpc()
-  });
+      await program.methods.initialize()
+        .accounts({
+          user: adminAccount.publicKey,
+          pdaAccount: shrubPda,
+          systemProgram: web3.SystemProgram.programId
+        })
+        .signers([adminAccount])
+        .rpc()
+    });
+
+  })
+
+  describe('usdc', async () => {
+    it('should ming usdc to admin', async () => {
+      // Mint 1,000,000 USDC to the admin's USDC account
+      await mintTo(
+        provider.connection,
+        adminAccount,
+        usdcMint,
+        adminUsdcAccount,
+        adminAccount,
+        1_000_000_000_000 // 1,000,000 USDC with 6 decimals
+      );
+
+      // Confirm the admin USDC balance before deposit
+      let adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+      expect(adminAccountInfo.amount).to.equal(1_000_000_000_000n);
+    });
+
+    it('admin should be able to transfer usdc to another user', async () => {
+      await transferChecked(
+        provider.connection,
+        adminAccount,
+        adminUsdcAccount,
+        usdcMint,
+        userUsdcAccount,
+        adminAccount,
+        1_000_000,
+        6
+      );
+    });
+    let adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+    let userAccountInfo = await getAccount(provider.connection, userUsdcAccount);
+    expect(adminAccountInfo.amount).to.equal(999_000_000_000n);
+    expect(userAccountInfo.amount).to.equal(1_000_000n);
+  })
 
 //   it('admin deposits 1M USDC', async () => {
 //     // Mint 1,000,000 USDC to the admin's USDC account
