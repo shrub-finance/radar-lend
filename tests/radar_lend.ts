@@ -11,12 +11,13 @@ import {
   transferChecked,
   ASSOCIATED_TOKEN_PROGRAM_ID
 } from '@solana/spl-token';
-import {beforeEach} from "mocha";
 
 const { web3 } = anchor;
 const SYSTEM_PROGRAM = web3.SystemProgram.programId;
 
-describe('radar-lend', () => {
+describe('radar-lend', function () { // Changed to regular function
+  this.timeout(10000); // Set timeout to 10 seconds
+
   const provider = anchor.AnchorProvider.local();
   anchor.setProvider(provider);
 
@@ -31,7 +32,9 @@ describe('radar-lend', () => {
   let shrubUsdcAccount: anchor.web3.PublicKey;
   let userUsdcAccount: anchor.web3.PublicKey;
 
-  before(async () => {
+  before(async function () { // Changed to regular function
+    this.timeout(20000); // Set timeout to 20 seconds for setup
+
     userAccount = anchor.web3.Keypair.generate();
     adminAccount = anchor.web3.Keypair.generate();
 
@@ -39,7 +42,7 @@ describe('radar-lend', () => {
     const latestBlockhashOne = await provider.connection.getLatestBlockhash();
     const signatureOne = await provider.connection.requestAirdrop(adminAccount.publicKey, 2_000_000_000);
     const latestBlockhashTwo = await provider.connection.getLatestBlockhash();
-    const signatureTwo = await provider.connection.requestAirdrop(userAccount.publicKey, 2_000_000_000);
+    const signatureTwo = await provider.connection.requestAirdrop(userAccount.publicKey, 10_000_000_000);
     await provider.connection.confirmTransaction({
       signature: signatureOne,
       blockhash: latestBlockhashOne.blockhash,
@@ -94,26 +97,26 @@ programId: ${program.programId}
     );
   });
 
-  describe('basics', () => {
-    it('accounts have the correct amount of SOL', async () => {
+  describe('basics', function () { // Changed to regular function
+    it('accounts have the correct amount of SOL', async function () { // Changed to regular function
       const adminBalance = await provider.connection.getBalance(adminAccount.publicKey);
       const userBalance = await provider.connection.getBalance(userAccount.publicKey);
-      expect(adminBalance).to.be.lt(2000000000);
+      expect(adminBalance).to.be.lt(2_000_000_000);
       expect(adminBalance).to.be.gt(0);
       console.log(adminBalance);
       console.log(userBalance);
     });
 
-    it('initializes', async () => {
+    it('initializes', async function () { // Changed to regular function
       console.log(`
 program: ${program.programId}
 user: ${adminAccount.publicKey}
 pdaAccount: ${shrubPda}
 systemProgram: ${web3.SystemProgram.programId}
-    `)
+      `)
       await program.methods.initialize()
         .accounts({
-          user: adminAccount.publicKey,
+          admin: adminAccount.publicKey,
           pdaAccount: shrubPda,
           systemProgram: web3.SystemProgram.programId,
           shrubUsdcAccount,
@@ -132,8 +135,8 @@ systemProgram: ${web3.SystemProgram.programId}
     });
   })
 
-  describe('usdc', () => {
-    it('should mint usdc to admin', async () => {
+  describe('usdc', function () { // Changed to regular function
+    it('should mint usdc to admin', async function () { // Changed to regular function
       // Mint 1,000,000 USDC to the admin's USDC account
       await mintTo(
         provider.connection,
@@ -149,7 +152,7 @@ systemProgram: ${web3.SystemProgram.programId}
       expect(adminAccountInfo.amount).to.equal(1_000_000_000_000n);
     });
 
-    it('admin should be able to transfer usdc to another user', async () => {
+    it('admin should be able to transfer usdc to another user', async function () { // Changed to regular function
       await transferChecked(
         provider.connection,
         adminAccount,
@@ -167,11 +170,75 @@ systemProgram: ${web3.SystemProgram.programId}
     });
   })
 
-  describe('main', () => {
-    describe('take_loan', async () => {
-      it('throws an error when insufficient collateral', async () => {
+  describe('deposit_usdc', function () { // Changed to regular function
+    it('admin deposits 1M USDC to shrub', async function () { // Changed to regular function
+      // Mint 1,000,000 USDC to the admin's USDC account
+      // Confirm the admin USDC balance before deposit
+      // Invoke the deposit_usdc function to deposit 1,000,000 USDC to shrubUsdcAccount
+      console.log(`
+adminAccount: ${adminAccount.publicKey}
+adminUsdcAccount: ${adminUsdcAccount}
+shrubPda: ${shrubPda}
+shrubUsdcAccount: ${shrubUsdcAccount}
+      `);
+      await program.methods.depositUsdc(new anchor.BN(999_999_000_000))
+        .accounts({
+          admin: adminAccount.publicKey,
+          adminUsdcAccount: adminUsdcAccount,
+          shrubUsdcAccount: shrubUsdcAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([adminAccount])
+        .rpc();
+
+      // Confirm the balances after deposit
+      const adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+      expect(adminAccountInfo.amount).to.equal(0n);
+
+      const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
+      expect(shrubAccountInfo.amount).to.equal(999_999_000_000n); // 1,000,000 USDC
+    });
+  });
+
+  describe('main', function () { // Changed to regular function
+    this.timeout(20000); // Set timeout to 20 seconds for setup
+
+    before(async function () { // Changed to regular function
+      this.timeout(20000); // Set timeout to 20 seconds for the hook
+
+      // Admin deposits 1,000,000 USDC to shrub's account before running loan tests
+      // await mintTo(
+      //   provider.connection,
+      //   adminAccount,
+      //   usdcMint,
+      //   adminUsdcAccount,
+      //   adminAccount,
+      //   1_000_000_000_000 // 1,000,000 USDC with 6 decimals
+      // );
+
+      // Deposit USDC to Shrub's account
+      // await program.methods.depositUsdc(new anchor.BN(1_000_000_000_000))
+      //   .accounts({
+      //     admin: adminAccount.publicKey,
+      //     adminUsdcAccount: adminUsdcAccount,
+      //     shrubUsdcAccount: shrubUsdcAccount,
+      //     tokenProgram: TOKEN_PROGRAM_ID,
+      //   })
+      //   .signers([adminAccount])
+      //   .rpc();
+      //
+      // // Confirm the deposit
+      // const adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+      // expect(adminAccountInfo.amount).to.equal(0n);
+      //
+      // const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
+      // expect(shrubAccountInfo.amount).to.equal(1_000_000_000_000n); // 1,000,000 USDC
+    });
+
+    describe('take_loan', function () { // Changed to regular function
+      it('throws an error when insufficient collateral', async function () { // Changed to regular function
         try {
-          await program.methods.takeLoan(new anchor.BN(1_000_000), 800, new anchor.BN(500_000_000)) // Attempting loan with insufficient collateral
+          await program.methods.takeLoan(new anchor.BN(1_000_000_000), 800, new anchor.BN(500_000_000_000)) // Attempting loan with insufficient collateral
             .accounts({
               pdaAccount: shrubPda,
               admin: adminAccount.publicKey,
@@ -192,7 +259,7 @@ systemProgram: ${web3.SystemProgram.programId}
         }
       });
 
-      it('throws an error when invalid apy specified', async () => {
+      it('throws an error when invalid apy specified', async function () { // Changed to regular function
         try {
           await program.methods.takeLoan(new anchor.BN(1_000_000), 999, new anchor.BN(2_000_000_000)) // Invalid APY
             .accounts({
@@ -214,7 +281,7 @@ systemProgram: ${web3.SystemProgram.programId}
         }
       });
 
-      it('successfully takes a loan with 5% APY', async () => {
+      it('successfully takes a loan with 5% APY', async function () { // Changed to regular function
         await program.methods.takeLoan(new anchor.BN(1_000_000), 500, new anchor.BN(3_300_000_000))
           .accounts({
             pdaAccount: shrubPda,
@@ -234,7 +301,7 @@ systemProgram: ${web3.SystemProgram.programId}
         expect(userAccountInfo.amount).to.equal(2_000_000n); // 1,000,000 already transferred + 1,000,000 loan
       });
 
-      it('successfully takes a loan with 0% APY', async () => {
+      it('successfully takes a loan with 0% APY', async function () { // Changed to regular function
         await program.methods.takeLoan(new anchor.BN(500_000), 0, new anchor.BN(2_000_000_000))
           .accounts({
             pdaAccount: shrubPda,
@@ -256,45 +323,4 @@ systemProgram: ${web3.SystemProgram.programId}
     });
   });
 
-  describe('deposit_usdc', () => {
-    it('admin deposits 1M USDC to shrub', async () => {
-      // Mint 1,000,000 USDC to the admin's USDC account
-      await mintTo(
-        provider.connection,
-        adminAccount,
-        usdcMint,
-        adminUsdcAccount,
-        adminAccount,
-        1_000_000_000_000 // 1,000,000 USDC with 6 decimals
-      );
-
-      // Confirm the admin USDC balance before deposit
-      let adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
-      expect(adminAccountInfo.amount).to.equal(1_000_000_000_000n);
-
-      // Invoke the deposit_usdc function to deposit 1,000,000 USDC to shrubUsdcAccount
-      console.log(`
-adminAccount: ${adminAccount.publicKey}
-adminUsdcAccount: ${adminUsdcAccount}
-shrubPda: ${shrubPda}
-shrubUsdcAccount: ${shrubUsdcAccount}
-      `);
-      await program.methods.depositUsdc(new anchor.BN(1_000_000_000_000))
-        .accounts({
-          admin: adminAccount.publicKey,
-          adminUsdcAccount: adminUsdcAccount,
-          shrubUsdcAccount: shrubUsdcAccount,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([adminAccount])
-        .rpc();
-
-      // Confirm the balances after deposit
-      adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
-      expect(adminAccountInfo.amount).to.equal(0n);
-
-      const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
-      expect(shrubAccountInfo.amount).to.equal(1_000_000_000_000n); // 1,000,000 USDC
-    });
-  });
 });

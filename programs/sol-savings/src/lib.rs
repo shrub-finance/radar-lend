@@ -14,8 +14,8 @@ pub mod radar_lend {
     /// Initializes the Shrub PDA and its associated USDC token account.
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let account_data = &mut ctx.accounts.pda_account;
-        account_data.user = *ctx.accounts.user.key;
-        account_data.admin = *ctx.accounts.user.key; // Set admin
+        account_data.user = *ctx.accounts.admin.key;
+        account_data.admin = *ctx.accounts.admin.key;
         account_data.bump = ctx.bumps.pda_account;
         account_data.loans = Vec::new(); // Initialize the loans vector
         msg!("Initialized PDA with user: {}", account_data.user);
@@ -119,6 +119,8 @@ pub mod radar_lend {
 
     /// Allows the admin to deposit USDC into the shrub's USDC account.
     pub fn deposit_usdc(ctx: Context<DepositUsdc>, amount: u64) -> Result<()> {
+        msg!("Starting deposit_usdc instruction");
+
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
@@ -140,14 +142,14 @@ pub mod radar_lend {
 pub struct Initialize<'info> {
     /// The admin who initializes the PDA.
     #[account(mut)]
-    pub user: Signer<'info>, // Consider renaming to `admin` for clarity
+    pub admin: Signer<'info>,
 
     /// The PDA account to be initialized.
     #[account(
         init,
-        seeds = [b"shrub", user.key().as_ref()],
+        seeds = [b"shrub", admin.key().as_ref()],
         bump,
-        payer = user,
+        payer = admin,
         space = 8 + DataAccount::INIT_SPACE,
     )]
     pub pda_account: Account<'info, DataAccount>,
@@ -155,7 +157,7 @@ pub struct Initialize<'info> {
     /// The Shrub PDA's associated USDC token account.
     #[account(
         init_if_needed,
-        payer = user,
+        payer = admin,
         associated_token::mint = usdc_mint,
         associated_token::authority = pda_account,
     )]
@@ -188,8 +190,9 @@ pub struct TakeLoan<'info> {
     )]
     pub pda_account: Account<'info, DataAccount>,
 
-    /// The admin account.
-    pub admin: Signer<'info>,
+    /// The admin account (used for deriving PDA).
+    /// CHECK: This is not used for data validation; it is only used for PDA derivation.
+    pub admin: AccountInfo<'info>,
 
     /// The user taking the loan.
     #[account(mut)]
