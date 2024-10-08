@@ -8,7 +8,8 @@ import {
   mintTo,
   getAccount,
   getAssociatedTokenAddress,
-  transferChecked
+  transferChecked,
+  ASSOCIATED_TOKEN_PROGRAM_ID
 } from '@solana/spl-token';
 
 const { web3 } = anchor;
@@ -123,10 +124,20 @@ systemProgram: ${web3.SystemProgram.programId}
         .accounts({
           user: adminAccount.publicKey,
           pdaAccount: shrubPda,
-          systemProgram: web3.SystemProgram.programId
+          systemProgram: web3.SystemProgram.programId,
+          shrubUsdcAccount,
+          usdcMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         })
         .signers([adminAccount])
         .rpc()
+
+        // Fetch the PDA's USDC token account.
+        const pdaUsdcAccount = await getAccount(provider.connection, shrubUsdcAccount);
+        expect(pdaUsdcAccount.owner.toString()).to.equal(shrubPda.toString());
+        expect(pdaUsdcAccount.mint.toString()).to.equal(usdcMint.toString());
+        expect(pdaUsdcAccount.amount.toString()).to.equal("0");
     });
 
   })
