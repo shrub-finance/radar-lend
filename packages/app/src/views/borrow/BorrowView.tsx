@@ -1,7 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import {handleErrorMessagesFactory} from "../../components/HandleErrorMessages";
-// import {useBalance, useConnectionStatus, useContract} from "@thirdweb-dev/react";
-// import { getContractAbis, getContractAddresses } from "../../utils/contracts";
+import React, { useEffect, useRef, useState } from 'react';
+import { handleErrorMessagesFactory } from '../../components/HandleErrorMessages';
 // import { NATIVE_TOKEN_ADDRESS } from "@thirdweb-dev/sdk";
 // import {
 //   EXCHANGE_RATE_BUFFER,
@@ -11,22 +9,25 @@ import {handleErrorMessagesFactory} from "../../components/HandleErrorMessages";
 //   percentMul,
 //   roundEth,
 // } from "../../utils/ethMethods";
-// import { BigNumber, ethers } from "ethers";
-import Image from "next/image";
-// import { interestRates, Zero } from "../../constants";
-import {useValidation} from "../../hooks/useValidation";
-import ErrorDisplay from "../../components/ErrorDisplay";
-// import { getChainInfo } from "../../utils/chains";
-import Tooltip from "../../components/Tooltip";
-import {isInvalidOrZero} from "../../utils/methods";
-import {interestRates} from "../../constants";
+import Image from 'next/image';
+import { useValidation } from '../../hooks/useValidation';
+import ErrorDisplay from '../../components/ErrorDisplay';
+import Tooltip from '../../components/Tooltip';
+import {
+  calculateRequiredCollateral,
+  EXCHANGE_RATE_BUFFER,
+  interestToLTV,
+  isInvalidOrZero,
+  ONE_HUNDRED_PERCENT,
+  roundSol,
+} from '../../utils/methods';
+import { interestRates, Zero } from '../../constants';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 interface BorrowViewProps {
   onBorrowViewChange: (interestRate: any, amount: any) => void;
-  // requiredCollateral: ethers.BigNumber;
-  requiredCollateral: '0';
-  // setRequiredCollateral: (value: ethers.BigNumber) => void;
-  setRequiredCollateral: (value: 0) => void;
+  requiredCollateral: BigInt;
+  setRequiredCollateral: (value: BigInt) => void;
 }
 
 export const BorrowView: React.FC<BorrowViewProps> = ({
@@ -34,16 +35,14 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
   requiredCollateral,
   setRequiredCollateral,
 }) => {
-  // const { chainId } = getChainInfo();
   // const { lendingPlatformAddress } = getContractAddresses(chainId);
   // const { lendingPlatformAbi } = getContractAbis(chainId);
   // const { chainId } = 123;
   // const { lendingPlatformAddress } = 'fff';
   // const { lendingPlatformAbi } = 'fff';
-  const NATIVE_TOKEN_ADDRESS = ''
+  const NATIVE_TOKEN_ADDRESS = '';
 
-
-  const [localError, setLocalError] = useState("");
+  const [localError, setLocalError] = useState('');
   const handleErrorMessages = handleErrorMessagesFactory(setLocalError);
   const [showBorrowAPYSection, setShowBorrowAPYSection] = useState(false);
   const {
@@ -54,12 +53,10 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
   // const { data: ethBalance, isLoading: ethBalanceIsLoading } =
   //   useBalance(NATIVE_TOKEN_ADDRESS);
   // const [maxBorrow, setMaxBorrow] = useState(ethers.utils.parseEther("0"));
-  const [borrowAmount, setBorrowAmount] = useState("");
-  const [displayAmount, setDisplayAmount] = useState("");
+  const [borrowAmount, setBorrowAmount] = useState('');
+  const [displayAmount, setDisplayAmount] = useState('');
   const [isMobile, setIsMobile] = useState(false);
-
-
-  const [selectedInterestRate, setSelectedInterestRate] = useState("8");
+  const [selectedInterestRate, setSelectedInterestRate] = useState('8');
   // const {
   //   contract: lendingPlatform,
   //   isLoading: lendingPlatformIsLoading,
@@ -69,14 +66,16 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
   const format = (val: string) => val;
   const isValidationError = !!borrowErrors.borrow;
 
-
-
-  const calculateFontSize = (baseSize: number, minSize: number, factor: number) => {
+  const calculateFontSize = (
+    baseSize: number,
+    minSize: number,
+    factor: number
+  ) => {
     const length = displayAmount.length;
     if (isMobile) {
-      return Math.max(baseSize - length * factor, minSize);  // Keep return on the same line
+      return Math.max(baseSize - length * factor, minSize);
     } else {
-      return Math.max(baseSize - length * factor, minSize);  // Keep return on the same line
+      return Math.max(baseSize - length * factor, minSize);
     }
   };
 
@@ -87,7 +86,6 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
       inputRef.current.focus();
     }
   }, []);
-
 
   // async function fillMax() {
   //   if (
@@ -105,36 +103,28 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
   //   }
   // }
   const handleAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    // if (ethBalance?.value?.isZero()) {
-    //   setBorrowError(
-    //     "borrow",
-    //     "No ETH balance. Please add ETH to your wallet.",
-    //   );
-    //   return;
-    // }
-
     let inputValue = event.target.value.trim();
 
     // If the input starts with '.', prepend '0' for proper parsing
-    if (inputValue.startsWith(".")) {
-      inputValue = "0" + inputValue;
+    if (inputValue.startsWith('.')) {
+      inputValue = '0' + inputValue;
     }
 
     // Remove commas for numeric processing
-    const rawValue = inputValue.replace(/,/g, "");
+    const rawValue = inputValue.replace(/,/g, '');
 
     // Ensure only one decimal point is allowed
     const decimalCount = (rawValue.match(/\./g) || []).length;
     if (decimalCount > 1) {
-      setBorrowError("borrow", "Only one decimal point is allowed.");
+      setBorrowError('borrow', 'Only one decimal point is allowed.');
       return;
     }
 
-    if (rawValue === "") {
-      setBorrowAmount("");
-      setDisplayAmount("");
-      setLocalError("");
-      clearBorrowError("borrow");
+    if (rawValue === '') {
+      setBorrowAmount('');
+      setDisplayAmount('');
+      setLocalError('');
+      clearBorrowError('borrow');
       return;
     }
 
@@ -148,12 +138,12 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
     const isInvalidOrZero =
       !isValidInput ||
       isNaN(parsedValue) ||
-      (parsedValue === 0 && rawValue !== "0" && rawValue !== "0.");
+      (parsedValue === 0 && rawValue !== '0' && rawValue !== '0.');
 
     if (isInvalidOrZero) {
-      setBorrowError("borrow", "Must be a valid number greater than 0.");
+      setBorrowError('borrow', 'Must be a valid number greater than 0.');
     } else {
-      clearBorrowError("borrow");
+      clearBorrowError('borrow');
     }
 
     setBorrowAmount(rawValue);
@@ -163,13 +153,13 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
 
     // Keep the raw input if there's a trailing decimal or if the input includes a decimal but is incomplete
     if (
-      rawValue.endsWith(".") ||
-      (rawValue.includes(".") && rawValue.match(/\.\d*0+$/))
+      rawValue.endsWith('.') ||
+      (rawValue.includes('.') && rawValue.match(/\.\d*0+$/))
     ) {
       formattedValue = rawValue; // Preserve trailing decimal and zeros
     } else {
       // Only format for display if the input is fully valid and does not include trailing decimal or zeros
-      formattedValue = parsedValue.toLocaleString("en-US", {
+      formattedValue = parsedValue.toLocaleString('en-US', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 6, // Adjust display for up to 6 decimal places
       });
@@ -179,31 +169,60 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
     setDisplayAmount(formattedValue);
   };
 
+  async function getSolanaPrice() {
+    try {
+      const response = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd'
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch Solana price');
+      }
+      const data = await response.json();
+      return data.solana.usd;
+    } catch (error) {
+      console.error('Error fetching Solana price:', error);
+      return null; // Return null or default value on failure
+    }
+  }
+
+  getSolanaPrice().then((price) => {
+    if (price !== null) {
+      console.log('SOL price in USD:', price);
+    } else {
+      console.log('Failed to fetch SOL price');
+    }
+  });
+
   useEffect(() => {
     async function determineRequiredCollateral() {
-      // const ltv = interestToLTV[selectedInterestRate];
-      // const usdcUnits = ethers.utils.parseUnits(borrowAmount, 6); // Use raw value for calculations
-      // const coll: BigNumber = await lendingPlatform.call("requiredCollateral", [
+      const ltv = interestToLTV[selectedInterestRate];
+      const LAMPORTS_PER_SOL = BigInt(1_000_000_000); // 1 SOL = 1 billion lamports
+      const borrowAmountInLamports = BigInt(
+        Number(borrowAmount) * 1_000_000_000
+      );
+      // const coll: BigNumber = await lendingPlatform.call('requiredCollateral', [
       //   ltv,
       //   usdcUnits,
       // ]);
-      // // Add the exchange rate buffer to the requiredCollateral
-      // return roundEth(
-      //   percentMul(coll, ONE_HUNDRED_PERCENT.add(EXCHANGE_RATE_BUFFER)),
-      //   6,
-      // );
+      const coll: BigInt = BigInt(20000000000);
+
+      return calculateRequiredCollateral(coll);
     }
 
-    // if (selectedInterestRate !== "" && borrowAmount !== "0" && !isInvalidOrZero(borrowAmount)) {
-    //   determineRequiredCollateral()
-    //     .then((res) => setRequiredCollateral(res))
-    //     .catch((e) => {
-    //       console.error(e);
-    //       handleErrorMessages({
-    //         customMessage: "Unable to determine required collateral",
-    //       });
-    //     });
-    // }
+    if (
+      selectedInterestRate !== '' &&
+      borrowAmount !== '0' &&
+      !isInvalidOrZero(borrowAmount)
+    ) {
+      determineRequiredCollateral()
+        .then((res) => setRequiredCollateral(BigInt(res)))
+        .catch((e) => {
+          console.error(e);
+          handleErrorMessages({
+            customMessage: 'Unable to determine required collateral',
+          });
+        });
+    }
   }, [
     borrowAmount,
     selectedInterestRate,
@@ -238,7 +257,7 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <=1024); // Tailwind's md breakpoint is 768px
+      setIsMobile(window.innerWidth <= 1024); // Tailwind's md breakpoint is 768px
     };
 
     handleResize(); // Check initial screen size
@@ -250,7 +269,6 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
   const handleBorrowContinue = () => {
     onBorrowViewChange(selectedInterestRate, borrowAmount);
   };
-
 
   return (
     <div className="md:hero mx-auto p-4 max-w-[600px]">
@@ -282,10 +300,6 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
           <h1 className="text-[36px] font-bold leading-[44px] tracking-tightest">
             Borrow
           </h1>
-          {/*<p className="text-[16px] font-normal leading-[24px] text-left">*/}
-          {/*  Borrow USDC on Shrub with fixed-rates as low as*/}
-          {/*  <span className="font-bold"> 0 - 8% APR</span>*/}
-          {/*</p>*/}
         </div>
 
         <div className="relative group mt-4 w-full">
@@ -303,7 +317,12 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
                   <div className="relative w-full">
                     <span
                       className="absolute left-[-0.25rem] top-1/2 transform -translate-y-1/2 text-[78px] pointer-events-none"
-                      style={isMobile ? { fontSize: `${calculateFontSize(78, 30, 3.8)}px` } : { fontSize: `${calculateFontSize(78, 24, 2.5)}px` }} >
+                      style={
+                        isMobile
+                          ? { fontSize: `${calculateFontSize(78, 30, 3.8)}px` }
+                          : { fontSize: `${calculateFontSize(78, 24, 2.5)}px` }
+                      }
+                    >
                       $
                     </span>
                     <input
@@ -320,14 +339,18 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
                         setShowBorrowAPYSection(true);
                       }}
                       value={format(displayAmount)}
-                      style={isMobile ? { fontSize: `${calculateFontSize(78, 24, 3.8 )}px` } : { fontSize: `${calculateFontSize(78, 24, 2.5)}px` }}
+                      style={
+                        isMobile
+                          ? { fontSize: `${calculateFontSize(78, 24, 3.8)}px` }
+                          : { fontSize: `${calculateFontSize(78, 24, 2.5)}px` }
+                      }
                     />
-                    <button
-                      className="hidden sm:block absolute right-4 top-1/2 transform -translate-y-1/2 bg-shrub-grey-light2 rounded-full px-4 py-2 font-semibold"
-                      // onClick={fillMax}
-                    >
-                      Max
-                    </button>
+                    {/*<button*/}
+                    {/*  className="hidden sm:block absolute right-4 top-1/2 transform -translate-y-1/2 bg-shrub-grey-light2 rounded-full px-4 py-2 font-semibold"*/}
+                    {/*   onClick={fillMax}*/}
+                    {/*>*/}
+                    {/*  Max*/}
+                    {/*</button>*/}
                   </div>
                   <ErrorDisplay errors={borrowErrors} />
                 </div>
@@ -378,25 +401,41 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
                       <span className="w-[360px]">Required collateral</span>
                       <span className="hidden md:inline">
                         <Image
-                          alt="eth logo"
-                          src="/eth-logo.svg"
-                          className="w-4 inline align-middle"
+                          alt="sol logo"
+                          src="/sol-logo.svg"
+                          className="w-4 inline align-baseline"
                           width="16"
-                          height="24"
-                        />{" "}
-                        ETH
+                          height="12"
+                        />{' '}
+                        SOL
                       </span>
                     </div>
                     <div className="card w-full bg-teal-50 border border-shrub-green px-2 sm:py-10 py-4">
                       {Number(borrowAmount) ? (
                         <span
                           className="text-shrub-green-500 font-bold text-center"
-                          style={isMobile ? { fontSize: `${calculateFontSize(36, 24, 2.5)}px` } : { fontSize: `${calculateFontSize(48, 30, 1)}px` }}>
-                          {/*{ethers.utils.formatEther(requiredCollateral)} ETH*/}
+                          style={
+                            isMobile
+                              ? {
+                                  fontSize: `${calculateFontSize(
+                                    36,
+                                    24,
+                                    2.5
+                                  )}px`,
+                                }
+                              : {
+                                  fontSize: `${calculateFontSize(48, 30, 1)}px`,
+                                }
+                          }
+                        >
+                          {(
+                            Number(requiredCollateral) / LAMPORTS_PER_SOL
+                          ).toFixed(6)}{' '}
+                          SOL
                         </span>
                       ) : (
                         <span className="sm:text-4xl md:text-5xl text-shrub-green-500 font-bold text-center">
-                          ---- ETH
+                          ---- SOL
                         </span>
                       )}
                     </div>
@@ -405,15 +444,18 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
                 <div className="divider h-[1px] w-full bg-shrub-grey-light2 my-8"></div>
                 {/*cta*/}
                 <Tooltip text="Enter amount to proceed" showOnDisabled>
-                  <button className="w-full h-[59px] px-5 py-3 bg-shrub-green-900 rounded-full text-white font-semibold leading-[24px] hover:!bg-shrub-green-500 disabled:bg-shrub-grey-50
+                  <button
+                    className="w-full h-[59px] px-5 py-3 bg-shrub-green-900 rounded-full text-white font-semibold leading-[24px] hover:!bg-shrub-green-500 disabled:bg-shrub-grey-50
                   disabled:border-shrub-grey-100
                   disabled:text-white
-                  disabled:border" disabled={
+                  disabled:border"
+                    disabled={
                       Number(borrowAmount) <= 0 ||
-                      selectedInterestRate === "" ||
+                      selectedInterestRate === '' ||
                       // requiredCollateral.lte(Zero) ||
                       isValidationError
-                    } onClick={() => {
+                    }
+                    onClick={() => {
                       handleBorrowContinue();
                     }}
                   >

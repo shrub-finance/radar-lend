@@ -4,7 +4,8 @@ const path = require('path');
 const nextConfig = {
   reactStrictMode: true,
   trailingSlash: true,
-  webpack: (config, options) => {
+  webpack: (config) => {
+    config.externals.push('pino-pretty', 'lokijs', 'encoding');
     return config;
   },
 };
