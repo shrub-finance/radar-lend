@@ -15,9 +15,11 @@ pub mod radar_lend {
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let account_data = &mut ctx.accounts.pda_account;
         account_data.user = *ctx.accounts.user.key;
+        account_data.admin = *ctx.accounts.user.key; // Set admin
         account_data.bump = ctx.bumps.pda_account;
         account_data.loans = Vec::new(); // Initialize the loans vector
         msg!("Initialized PDA with user: {}", account_data.user);
+        msg!("Admin: {}", account_data.admin);
         msg!("PDA bump: {}", account_data.bump);
         Ok(())
     }
@@ -75,8 +77,7 @@ pub mod radar_lend {
 
         // Transfer USDC from the Shrub's USDC account to the user's USDC account
         // Since the PDA is the authority, we need to sign with PDA's seeds
-        let binding = ctx.accounts.user.key();
-        let seeds = &[b"shrub", binding.as_ref(), &[ctx.accounts.pda_account.bump]];
+        let seeds = &[b"shrub", ctx.accounts.admin.key.as_ref(), &[ctx.accounts.pda_account.bump]];
         let signer_seeds = &[&seeds[..]];
 
         token::transfer(
@@ -115,13 +116,31 @@ pub mod radar_lend {
 
         Ok(())
     }
+
+    /// Allows the admin to deposit USDC into the shrub's USDC account.
+    pub fn deposit_usdc(ctx: Context<DepositUsdc>, amount: u64) -> Result<()> {
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                token::Transfer {
+                    from: ctx.accounts.admin_usdc_account.to_account_info(),
+                    to: ctx.accounts.shrub_usdc_account.to_account_info(),
+                    authority: ctx.accounts.admin.to_account_info(),
+                },
+            ),
+            amount,
+        )?;
+
+        msg!("Admin deposited {} USDC to Shrub's account", amount);
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    /// The user who initializes the PDA.
+    /// The admin who initializes the PDA.
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub user: Signer<'info>, // Consider renaming to `admin` for clarity
 
     /// The PDA account to be initialized.
     #[account(
@@ -163,11 +182,14 @@ pub struct TakeLoan<'info> {
     /// The PDA account.
     #[account(
         mut,
-        has_one = user,
-        seeds = [b"shrub", user.key().as_ref()],
+        has_one = admin,
+        seeds = [b"shrub", admin.key().as_ref()],
         bump = pda_account.bump
     )]
     pub pda_account: Account<'info, DataAccount>,
+
+    /// The admin account.
+    pub admin: Signer<'info>,
 
     /// The user taking the loan.
     #[account(mut)]
@@ -194,10 +216,29 @@ pub struct TakeLoan<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
+#[derive(Accounts)]
+pub struct DepositUsdc<'info> {
+    /// The admin account.
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    /// The admin's USDC token account.
+    #[account(mut)]
+    pub admin_usdc_account: Account<'info, TokenAccount>,
+
+    /// The Shrub PDA's associated USDC token account.
+    #[account(mut)]
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
+
+    /// Token program.
+    pub token_program: Program<'info, Token>,
+}
+
 /// The PDA account structure.
 #[account]
 pub struct DataAccount {
     pub user: Pubkey,      // Owner of the PDA
+    pub admin: Pubkey,     // Admin of the PDA
     pub bump: u8,          // Bump for PDA derivation
     pub loans: Vec<Loan>,  // List of loans
 }
@@ -205,10 +246,11 @@ pub struct DataAccount {
 impl DataAccount {
     /// Space required for the DataAccount:
     /// - user: 32 bytes
+    /// - admin: 32 bytes
     /// - bump: 1 byte
     /// - loans: 4 bytes (vector length) + 40 bytes * 10 loans
-    /// Total: 32 + 1 + 4 + 400 = 437 bytes
-    const INIT_SPACE: usize = 32 + 1 + 4 + 40 * 10;
+    /// Total: 32 + 32 + 1 + 4 + 400 = 469 bytes
+    const INIT_SPACE: usize = 32 + 32 + 1 + 4 + 40 * 10;
 }
 
 /// Represents an individual loan.

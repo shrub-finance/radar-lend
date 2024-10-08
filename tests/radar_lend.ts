@@ -92,16 +92,6 @@ programId: ${program.programId}
       shrubPda,
       true
     );
-
-    // await program.methods.initialize()
-    //   .accounts({
-    //     userAccount: userAccount.publicKey,
-    //     owner: provider.wallet.publicKey,
-    //     usdcMint: usdcMint,
-    //   })
-    //   .signers([userAccount])
-    //   .rpc();
-
   });
 
   describe('basics', () => {
@@ -134,17 +124,16 @@ systemProgram: ${web3.SystemProgram.programId}
         .signers([adminAccount])
         .rpc()
 
-        // Fetch the PDA's USDC token account.
-        const pdaUsdcAccount = await getAccount(provider.connection, shrubUsdcAccount);
-        expect(pdaUsdcAccount.owner.toString()).to.equal(shrubPda.toString());
-        expect(pdaUsdcAccount.mint.toString()).to.equal(usdcMint.toString());
-        expect(pdaUsdcAccount.amount.toString()).to.equal("0");
+      // Fetch the PDA's USDC token account.
+      const pdaUsdcAccount = await getAccount(provider.connection, shrubUsdcAccount);
+      expect(pdaUsdcAccount.owner.toString()).to.equal(shrubPda.toString());
+      expect(pdaUsdcAccount.mint.toString()).to.equal(usdcMint.toString());
+      expect(pdaUsdcAccount.amount.toString()).to.equal("0");
     });
-
   })
 
   describe('usdc', () => {
-    it('should ming usdc to admin', async () => {
+    it('should mint usdc to admin', async () => {
       // Mint 1,000,000 USDC to the admin's USDC account
       await mintTo(
         provider.connection,
@@ -185,6 +174,7 @@ systemProgram: ${web3.SystemProgram.programId}
           await program.methods.takeLoan(new anchor.BN(1_000_000), 800, new anchor.BN(500_000_000)) // Attempting loan with insufficient collateral
             .accounts({
               pdaAccount: shrubPda,
+              admin: adminAccount.publicKey,
               user: userAccount.publicKey,
               userUsdcAccount,
               shrubUsdcAccount,
@@ -207,6 +197,7 @@ systemProgram: ${web3.SystemProgram.programId}
           await program.methods.takeLoan(new anchor.BN(1_000_000), 999, new anchor.BN(2_000_000_000)) // Invalid APY
             .accounts({
               pdaAccount: shrubPda,
+              admin: adminAccount.publicKey,
               user: userAccount.publicKey,
               userUsdcAccount,
               shrubUsdcAccount,
@@ -227,6 +218,7 @@ systemProgram: ${web3.SystemProgram.programId}
         await program.methods.takeLoan(new anchor.BN(1_000_000), 500, new anchor.BN(3_300_000_000))
           .accounts({
             pdaAccount: shrubPda,
+            admin: adminAccount.publicKey,
             user: userAccount.publicKey,
             userUsdcAccount,
             shrubUsdcAccount,
@@ -246,6 +238,7 @@ systemProgram: ${web3.SystemProgram.programId}
         await program.methods.takeLoan(new anchor.BN(500_000), 0, new anchor.BN(2_000_000_000))
           .accounts({
             pdaAccount: shrubPda,
+            admin: adminAccount.publicKey,
             user: userAccount.publicKey,
             userUsdcAccount,
             shrubUsdcAccount,
@@ -263,42 +256,45 @@ systemProgram: ${web3.SystemProgram.programId}
     });
   });
 
-//   it('admin deposits 1M USDC', async () => {
-//     // Mint 1,000,000 USDC to the admin's USDC account
-//     await mintTo(
-//       provider.connection,
-//       adminAccount,
-//       usdcMint,
-//       adminUsdcAccount,
-//       adminAccount,
-//       1_000_000_000_000 // 1,000,000 USDC with 6 decimals
-//     );
-//
-//     // Confirm the admin USDC balance before deposit
-//     let adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
-//     expect(adminAccountInfo.amount).to.equal(1_000_000_000_000n);
-//
-//     // Invoke the admin_deposit_usdc function to deposit 1,000,000 USDC to shrubUsdcAccount
-//     console.log(`
-// adminAccount: ${adminAccount.publicKey}
-// adminUsdcAccount: ${adminUsdcAccount}
-// shrubPda: ${shrubPda}
-// shrubUsdcAccount: ${shrubUsdcAccount}
-//     `)
-//     await program.methods.adminDepositUsdc(new anchor.BN(1_000_000_000_000))
-//       .accounts({
-//         admin: adminAccount.publicKey,
-//         adminUsdcAccount: adminUsdcAccount,
-//         shrubUsdcAccount: shrubUsdcAccount,
-//       })
-//       .signers([adminAccount])
-//       .rpc();
-//
-//     // Confirm the balances after deposit
-//     adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
-//     expect(adminAccountInfo.amount).to.equal(0n);
-//
-//     const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
-//     expect(shrubAccountInfo.amount).to.equal(1_000_000_000_000n); // 1,000,000 USDC
-//   });
+  describe('deposit_usdc', () => {
+    it('admin deposits 1M USDC to shrub', async () => {
+      // Mint 1,000,000 USDC to the admin's USDC account
+      await mintTo(
+        provider.connection,
+        adminAccount,
+        usdcMint,
+        adminUsdcAccount,
+        adminAccount,
+        1_000_000_000_000 // 1,000,000 USDC with 6 decimals
+      );
+
+      // Confirm the admin USDC balance before deposit
+      let adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+      expect(adminAccountInfo.amount).to.equal(1_000_000_000_000n);
+
+      // Invoke the deposit_usdc function to deposit 1,000,000 USDC to shrubUsdcAccount
+      console.log(`
+adminAccount: ${adminAccount.publicKey}
+adminUsdcAccount: ${adminUsdcAccount}
+shrubPda: ${shrubPda}
+shrubUsdcAccount: ${shrubUsdcAccount}
+      `);
+      await program.methods.depositUsdc(new anchor.BN(1_000_000_000_000))
+        .accounts({
+          admin: adminAccount.publicKey,
+          adminUsdcAccount: adminUsdcAccount,
+          shrubUsdcAccount: shrubUsdcAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([adminAccount])
+        .rpc();
+
+      // Confirm the balances after deposit
+      adminAccountInfo = await getAccount(provider.connection, adminUsdcAccount);
+      expect(adminAccountInfo.amount).to.equal(0n);
+
+      const shrubAccountInfo = await getAccount(provider.connection, shrubUsdcAccount);
+      expect(shrubAccountInfo.amount).to.equal(1_000_000_000_000n); // 1,000,000 USDC
+    });
+  });
 });
