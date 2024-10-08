@@ -8,14 +8,15 @@ declare_id!("4aXgVPzHdoVsKSZWS4op4oHTHHqrFHkkpV93NshquE6L");
 pub mod radar_lend {
     use super::*;
 
-    const SOL_PRICE_USD: u64 = 100_000_000; // Hard-coded SOL price in USDC
+    const SOL_PRICE_USD: u64 = 100_000_000; // Hard-coded SOL price in USDC (100 USDC per SOL)
     const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
     /// Initializes the Shrub PDA and its associated USDC token account.
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let account_data = &mut ctx.accounts.pda_account;
-        account_data.user = *ctx.accounts.admin.key;
+        account_data.user = *ctx.accounts.user.key;
         account_data.bump = ctx.bumps.pda_account;
+        account_data.loans = Vec::new(); // Initialize the loans vector
         msg!("Initialized PDA with user: {}", account_data.user);
         msg!("PDA bump: {}", account_data.bump);
         Ok(())
@@ -24,9 +25,9 @@ pub mod radar_lend {
     /// Allows users to take a loan by specifying principal, APY, and collateral.
     pub fn take_loan(
         ctx: Context<TakeLoan>,
-        principal: u64, // Amount of USDC to borrow
-        apy: u16,       // Annual Percentage Yield in basis points (bps)
-        collateral: u64, // Amount of SOL to collateralize
+        principal: u64,  // Amount of USDC to borrow
+        apy: u16,        // Annual Percentage Yield in basis points (bps)
+        collateral: u64, // Amount of SOL to collateralize (in lamports)
     ) -> Result<()> {
         {
             // Define allowed APY:LTV pairs (APY in bps, LTV in bps)
@@ -47,8 +48,8 @@ pub mod radar_lend {
             // Calculate required collateral in SOL
             // Formula: required_collateral_usd = principal / (ltv / 10000)
             //          required_collateral_sol = required_collateral_usd / SOL_PRICE_USD
-            let required_collateral_usd = principal as f64 * ltv as f64 / 10_000.0;
-            let required_collateral_sol = required_collateral_usd / (SOL_PRICE_USD as f64) * (LAMPORTS_PER_SOL as f64);
+            let required_collateral_usd = (principal as f64) * (ltv as f64) / 10_000.0;
+            let required_collateral_sol = required_collateral_usd / (SOL_PRICE_USD as f64 / 1_000_000.0) / (LAMPORTS_PER_SOL as f64);
             let required_collateral_sol_u64 = required_collateral_sol.ceil() as u64; // Round up to ensure sufficient
 
             // Verify that the provided collateral meets or exceeds the required collateral
@@ -72,10 +73,10 @@ pub mod radar_lend {
             ],
         )?;
 
-        // Transfer USDC from the PDA's USDC account to the user's USDC account
+        // Transfer USDC from the Shrub's USDC account to the user's USDC account
         // Since the PDA is the authority, we need to sign with PDA's seeds
-        let account_data = &ctx.accounts.pda_account; // Borrow as immutable after mutable borrow scope ends
-        let seeds = &[b"shrub", account_data.user.as_ref(), &[account_data.bump]];
+        let binding = ctx.accounts.user.key();
+        let seeds = &[b"shrub", binding.as_ref(), &[ctx.accounts.pda_account.bump]];
         let signer_seeds = &[&seeds[..]];
 
         token::transfer(
@@ -120,22 +121,22 @@ pub mod radar_lend {
 pub struct Initialize<'info> {
     /// The user who initializes the PDA.
     #[account(mut)]
-    pub admin: Signer<'info>,
+    pub user: Signer<'info>,
 
     /// The PDA account to be initialized.
     #[account(
         init,
-        seeds = [b"shrub", admin.key().as_ref()],
+        seeds = [b"shrub", user.key().as_ref()],
         bump,
-        payer = admin,
+        payer = user,
         space = 8 + DataAccount::INIT_SPACE,
     )]
     pub pda_account: Account<'info, DataAccount>,
 
     /// The Shrub PDA's associated USDC token account.
     #[account(
-        init,
-        payer = admin,
+        init_if_needed,
+        payer = user,
         associated_token::mint = usdc_mint,
         associated_token::authority = pda_account,
     )]
@@ -160,7 +161,12 @@ pub struct Initialize<'info> {
 #[derive(Accounts)]
 pub struct TakeLoan<'info> {
     /// The PDA account.
-    #[account(mut, has_one = user)]
+    #[account(
+        mut,
+        has_one = user,
+        seeds = [b"shrub", user.key().as_ref()],
+        bump = pda_account.bump
+    )]
     pub pda_account: Account<'info, DataAccount>,
 
     /// The user taking the loan.
