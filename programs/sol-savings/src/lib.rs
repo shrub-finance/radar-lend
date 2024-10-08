@@ -27,37 +27,42 @@ pub mod radar_lend {
     /// Allows users to take a loan by specifying principal, APY, and collateral.
     pub fn take_loan(
         ctx: Context<TakeLoan>,
-        principal: u64,  // Amount of USDC to borrow
+        principal: u64,  // Amount of USDC to borrow (in micro units, i.e., 6 decimals)
         apy: u16,        // Annual Percentage Yield in basis points (bps)
         collateral: u64, // Amount of SOL to collateralize (in lamports)
     ) -> Result<()> {
-        {
-            // Define allowed APY:LTV pairs (APY in bps, LTV in bps)
-            let allowed_pairs = vec![
-                (800u16, 5000u64),
-                (500u16, 3300u64),
-                (100u16, 2500u64),
-                (0u16, 2000u64),
-            ];
+        // Define allowed APY:LTV pairs (APY in bps, LTV in bps)
+        let allowed_pairs = vec![
+            (800u16, 5000u64), // 80% LTV
+            (500u16, 3300u64), // 33% LTV
+            (100u16, 2500u64), // 25% LTV
+            (0u16, 2000u64),   // 20% LTV
+        ];
 
-            // Find the LTV corresponding to the provided APY
-            let ltv = allowed_pairs
-                .iter()
-                .find(|&&(allowed_apy, _)| allowed_apy == apy)
-                .map(|&(_, ltv)| ltv)
-                .ok_or(ErrorCode::InvalidAPY)?;
+        // Find the LTV corresponding to the provided APY
+        let ltv = allowed_pairs
+            .iter()
+            .find(|&&(allowed_apy, _)| allowed_apy == apy)
+            .map(|&(_, ltv)| ltv)
+            .ok_or(ErrorCode::InvalidAPY)?;
 
-            // Calculate required collateral in SOL
-            // Formula: required_collateral_usd = principal / (ltv / 10000)
-            //          required_collateral_sol = required_collateral_usd / SOL_PRICE_USD
-            let required_collateral_usd = (principal as f64) * (ltv as f64) / 10_000.0;
-            let required_collateral_sol = required_collateral_usd / (SOL_PRICE_USD as f64 / 1_000_000.0) / (LAMPORTS_PER_SOL as f64);
-            let required_collateral_sol_u64 = required_collateral_sol.ceil() as u64; // Round up to ensure sufficient
+        // Convert SOL price to micro-USDC (6 decimals) representation.
+        // Calculate required collateral in lamports using integer arithmetic:
+        // Formula: required_collateral_lamports = (principal * LAMPORTS_PER_SOL * 10_000) / (ltv * SOL_PRICE_USD)
+        let required_collateral_lamports = (principal as u128)
+            .checked_mul(LAMPORTS_PER_SOL as u128)
+            .and_then(|val| val.checked_mul(10_000))
+            .and_then(|val| val.checked_div((ltv as u128).checked_mul(SOL_PRICE_USD as u128).unwrap()))
+            .ok_or(ErrorCode::InsufficientCollateral)?;
 
-            // Verify that the provided collateral meets or exceeds the required collateral
-            if collateral < required_collateral_sol_u64 {
-                return Err(ErrorCode::InsufficientCollateral.into());
-            }
+        let required_collateral_lamports_u64 = required_collateral_lamports as u64;
+
+        msg!("collateral: {}", collateral);
+        msg!("required_collateral_lamports_u64: {}", required_collateral_lamports_u64);
+
+        // Verify that the provided collateral meets or exceeds the required collateral
+        if collateral < required_collateral_lamports_u64 {
+            return Err(ErrorCode::InsufficientCollateral.into());
         }
 
         // Transfer SOL from the user to the PDA
@@ -107,15 +112,16 @@ pub mod radar_lend {
 
         // Emit a LoanTaken event
         emit!(LoanTaken {
-            loan_id,
-            borrower: ctx.accounts.user.key(),
-            principal,
-            apy,
-            collateral,
-        });
+        loan_id,
+        borrower: ctx.accounts.user.key(),
+        principal,
+        apy,
+        collateral,
+    });
 
         Ok(())
     }
+
 
     /// Allows the admin to deposit USDC into the shrub's USDC account.
     pub fn deposit_usdc(ctx: Context<DepositUsdc>, amount: u64) -> Result<()> {

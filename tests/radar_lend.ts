@@ -55,11 +55,11 @@ describe('radar-lend', function () { // Changed to regular function
     });
 
     // Derive PDA for Shrub (the program)
-    console.log(`
-'shrub'
-adminAccount: ${adminAccount.publicKey}
-programId: ${program.programId}
-    `)
+//     console.log(`
+// 'shrub'
+// adminAccount: ${adminAccount.publicKey}
+// programId: ${program.programId}
+//     `)
     const shrubFindAddressArr = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("shrub"), adminAccount.publicKey.toBuffer()],
       program.programId
@@ -103,17 +103,17 @@ programId: ${program.programId}
       const userBalance = await provider.connection.getBalance(userAccount.publicKey);
       expect(adminBalance).to.be.lt(2_000_000_000);
       expect(adminBalance).to.be.gt(0);
-      console.log(adminBalance);
-      console.log(userBalance);
+      // console.log(adminBalance);
+      // console.log(userBalance);
     });
 
     it('initializes', async function () { // Changed to regular function
-      console.log(`
-program: ${program.programId}
-user: ${adminAccount.publicKey}
-pdaAccount: ${shrubPda}
-systemProgram: ${web3.SystemProgram.programId}
-      `)
+      // console.log(`
+// program: ${program.programId}
+// user: ${adminAccount.publicKey}
+// pdaAccount: ${shrubPda}
+// systemProgram: ${web3.SystemProgram.programId}
+//       `)
       await program.methods.initialize()
         .accounts({
           admin: adminAccount.publicKey,
@@ -175,12 +175,12 @@ systemProgram: ${web3.SystemProgram.programId}
       // Mint 1,000,000 USDC to the admin's USDC account
       // Confirm the admin USDC balance before deposit
       // Invoke the deposit_usdc function to deposit 1,000,000 USDC to shrubUsdcAccount
-      console.log(`
-adminAccount: ${adminAccount.publicKey}
-adminUsdcAccount: ${adminUsdcAccount}
-shrubPda: ${shrubPda}
-shrubUsdcAccount: ${shrubUsdcAccount}
-      `);
+      // console.log(`
+// adminAccount: ${adminAccount.publicKey}
+// adminUsdcAccount: ${adminUsdcAccount}
+// shrubPda: ${shrubPda}
+// shrubUsdcAccount: ${shrubUsdcAccount}
+//       `);
       await program.methods.depositUsdc(new anchor.BN(999_999_000_000))
         .accounts({
           admin: adminAccount.publicKey,
@@ -238,7 +238,7 @@ shrubUsdcAccount: ${shrubUsdcAccount}
     describe('take_loan', function () { // Changed to regular function
       it('throws an error when insufficient collateral', async function () { // Changed to regular function
         try {
-          await program.methods.takeLoan(new anchor.BN(1_000_000_000), 800, new anchor.BN(500_000_000_000)) // Attempting loan with insufficient collateral
+          await program.methods.takeLoan(new anchor.BN(1_000_000_000), 800, new anchor.BN(4_000_000_000)) // Attempting loan with insufficient collateral
             .accounts({
               pdaAccount: shrubPda,
               admin: adminAccount.publicKey,
@@ -254,7 +254,6 @@ shrubUsdcAccount: ${shrubUsdcAccount}
             .rpc();
           expect.fail("Expected error for insufficient collateral");
         } catch (err) {
-          console.log(err);
           expect(err.message).to.include("Insufficient collateral provided");
         }
       });
@@ -282,6 +281,9 @@ shrubUsdcAccount: ${shrubUsdcAccount}
       });
 
       it('successfully takes a loan with 5% APY', async function () { // Changed to regular function
+        const userAccountInfoBefore = await getAccount(provider.connection, userUsdcAccount);
+        const userBalanceBefore = await provider.connection.getBalance(userAccount.publicKey);
+        expect(userAccountInfoBefore.amount).to.equal(1_000_000n); // 1,000,000 already transferred
         await program.methods.takeLoan(new anchor.BN(1_000_000), 500, new anchor.BN(3_300_000_000))
           .accounts({
             pdaAccount: shrubPda,
@@ -297,7 +299,10 @@ shrubUsdcAccount: ${shrubUsdcAccount}
           .signers([userAccount])
           .rpc();
 
+        const userBalanceAfter = await provider.connection.getBalance(userAccount.publicKey);
         const userAccountInfo = await getAccount(provider.connection, userUsdcAccount);
+        console.log(userBalanceBefore, userBalanceAfter)
+        expect(userBalanceBefore - userBalanceAfter).to.equal(3_300_000_000);
         expect(userAccountInfo.amount).to.equal(2_000_000n); // 1,000,000 already transferred + 1,000,000 loan
       });
 
