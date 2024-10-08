@@ -1,11 +1,15 @@
-// app/src/pages/_app.tsx
 
 import { AppProps } from 'next/app';
 import { createAppKit } from '@reown/appkit/react';
 import { SolanaAdapter } from '@reown/appkit-adapter-solana/react';
 import { solana, solanaTestnet, solanaDevnet } from '@reown/appkit/networks';
 import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
-import '../styles/globals.css';
+import '../styles/globals.css';  
+import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
+import { MobileMenu } from "../components/MobileMenu";
+import {AppBar} from "../components/AppBar";
+
 
 const solanaWeb3JsAdapter = new SolanaAdapter({
   wallets: [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
@@ -34,8 +38,35 @@ export const appKit = createAppKit({
   },
 });
 
-function MyApp({ Component, pageProps }: AppProps) {
-  return <Component {...pageProps} />;
+function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 1024);
+    };
+
+    handleResize(); // Call once on load
+    window.addEventListener('resize', handleResize);
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return (
+    <>
+      <div className="flex flex-col h-screen">
+        <AppBar />
+        {isMobile ? (
+          <MobileMenu>
+            <Component {...pageProps} />
+          </MobileMenu>
+        ) : (
+          <Component {...pageProps} />
+        )}
+      </div>
+    </>
+  );
 }
 
-export default MyApp;
+export default App;

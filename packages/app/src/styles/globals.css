@@ -1,27 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@layer base {
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+    padding: 0;
+    margin: 0;
+    background-color: #fff;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased; /* For WebKit browsers */
+    -moz-osx-font-smoothing: grayscale;  /* For Firefox on macOS */
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+input, textarea {
+  caret-color: #219f80;
+}
+
+/*spinner svg style for when tx is in process*/
+.web3button svg circle{
+  stroke: #0A4736;
+}
+
+@media (max-width: 375px) {
+  img.tw-connected-wallet__wallet-icon {
+    display: none;
+  }
+
+  img.tw-connected-wallet__network-icon {
+    display: none;
   }
 }
+
+
+.tw-connected-wallet__address {
+  color: white !important;
+  line-height: 1.2 !important;
+}
+
+.tw-connected-wallet__balance {
+  line-height: 1.2 !important;
+}
+
+@media (hover: hover) {
+    .hover\:bg-blue-700:hover {
+        background-color: #4CAF50; /* Adjust to your design */
+    }
+}
+
+
+

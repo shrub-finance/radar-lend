@@ -12,10 +12,11 @@
     "dev": "yarn workspace app dev",
     "build:app": "yarn workspace app build",
     "app": "yarn build:app && yarn workspace app start",
-    "contracts": "yarn workspace contracts build"
+    "deploy": "yarn workspace programs deploy",
+    "build": "yarn workspace programs build",
+    "test": "yarn workspace programs test"
   },
   "resolutions": {
     "@solana/web3.js": "1.95.2"
-  },
-  "packageManager": "yarn@1.22.19+sha1.4ba7fc5c6e704fce2066ecbfb0b0d8976fe62447"
+  }
 }
