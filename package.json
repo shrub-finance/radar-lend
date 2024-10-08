@@ -14,9 +14,13 @@
     "app": "yarn build:app && yarn workspace app start",
     "deploy": "yarn workspace programs deploy",
     "build": "yarn workspace programs build",
-    "test": "yarn workspace programs test"
+    "test": "yarn workspace programs test",
+    "postinstall": "patch-package"
   },
   "resolutions": {
     "@solana/web3.js": "1.95.2"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.0"
   }
 }
