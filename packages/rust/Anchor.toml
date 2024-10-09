@@ -1,0 +1,29 @@
+[features]
+seeds = false
+skip-lint = false
+idl-build = ["anchor-spl/idl-build"]
+
+[programs.localnet]
+radar_lend = "4aXgVPzHdoVsKSZWS4op4oHTHHqrFHkkpV93NshquE6L"
+
+[programs.devnet]
+radar_lend = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
+
+[programs.mainnet]
+radar_lend = "3e4U8VDi5ctePpTNErDURm24g5G2Rj9kWGLVco6Rx1ex"
+
+[registry]
+url = "https://anchor.projectserum.com" # Default Anchor registry
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn ts-mocha -p tsconfig.json tests/**/*.ts"
+
+[test]
+startup_wait = 500
+
+[workspace]
+types = "target/types/radar_lend"

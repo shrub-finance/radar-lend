@@ -1,0 +1,35 @@
+diff --git a/node_modules/@reown/appkit/dist/esm/exports/index.js b/node_modules/@reown/appkit/dist/esm/exports/index.js
+index 60e6d9e..12c7490 100644
+--- a/node_modules/@reown/appkit/dist/esm/exports/index.js
++++ b/node_modules/@reown/appkit/dist/esm/exports/index.js
+@@ -1,5 +1,5 @@
+ import { AppKit } from '../src/client.js';
+-import packageJson from '../package.json' assert { type: 'json' };
++import packageJson from '../package.json' with { type: 'json' };
+ import { CoreHelperUtil } from '@reown/appkit-core';
+ // -- Views ------------------------------------------------------------
+ export * from '@reown/appkit-scaffold-ui';
+diff --git a/node_modules/@reown/appkit/dist/esm/exports/react.js b/node_modules/@reown/appkit/dist/esm/exports/react.js
+index f56ab6f..0e25da5 100644
+--- a/node_modules/@reown/appkit/dist/esm/exports/react.js
++++ b/node_modules/@reown/appkit/dist/esm/exports/react.js
+@@ -1,6 +1,6 @@
+ import { AppKit } from '../src/client.js';
+ import { getAppKit } from '../src/library/react/index.js';
+-import packageJson from '../package.json' assert { type: 'json' };
++import packageJson from '../package.json' with { type: 'json' };
+ import { CoreHelperUtil } from '@reown/appkit-core';
+ // -- Views ------------------------------------------------------------
+ export * from '@reown/appkit-scaffold-ui';
+diff --git a/node_modules/@reown/appkit/dist/esm/exports/vue.js b/node_modules/@reown/appkit/dist/esm/exports/vue.js
+index c4ed7a0..aec3b79 100644
+--- a/node_modules/@reown/appkit/dist/esm/exports/vue.js
++++ b/node_modules/@reown/appkit/dist/esm/exports/vue.js
+@@ -1,6 +1,6 @@
+ import { AppKit } from '../src/client.js';
+ import { getAppKit } from '../src/library/vue/index.js';
+-import packageJson from '../package.json' assert { type: 'json' };
++import packageJson from '../package.json' with { type: 'json' };
+ import { CoreHelperUtil } from '@reown/appkit-core';
+ // -- Views ------------------------------------------------------------
+ export * from '@reown/appkit-scaffold-ui';
