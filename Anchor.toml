@@ -23,7 +23,7 @@ wallet = "~/.config/solana/id.json"
 test = "yarn ts-mocha -p tsconfig.json tests/**/*.ts"
 
 [test]
-startup_wait = 500
+startup_wait = 3000
 
 [workspace]
 types = "target/types/radar_lend"
