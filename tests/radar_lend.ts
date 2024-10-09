@@ -296,7 +296,7 @@ describe('radar-lend', function () { // Changed to regular function
     });
 
     describe('repay_loan', function () { // New describe block for repay_loan
-      // Define variables to hold loan details
+                                         // Define variables to hold loan details
       let loanId: anchor.BN;
       let loanPrincipal: bigint;
       let loanApy: number;
@@ -324,7 +324,7 @@ describe('radar-lend', function () { // Changed to regular function
         // Fetch the loan details
         const pdaAccountData = await program.account.dataAccount.fetch(shrubPda);
         console.log(pdaAccountData);
-        const loan = pdaAccountData.loans.find(l => Number(l.id) === 2 && !l.repaid); // Assuming this is the second loan
+        const loan = pdaAccountData.loans.find(l => l.id.toNumber() === 2 && !l.repaid); // Assuming this is the second loan
         expect(loan).to.exist;
 
         if (!loan) {
@@ -332,26 +332,26 @@ describe('radar-lend', function () { // Changed to regular function
         }
 
         loanId = new anchor.BN(2);
-        loanPrincipal = BigInt(loan.principal.toNumber());
+        loanPrincipal = BigInt(loan.principal.toString());
         loanApy = loan.apy;
-        loanCollateral = BigInt(loan.collateral.toNumber());
+        loanCollateral = BigInt(loan.collateral.toString());
 
         // Calculate expected interest (assuming sufficient duration)
         const currentTime = Math.floor(Date.now() / 1000); // Current Unix timestamp
-        const duration = currentTime - Number(loan.createdAt);
+        const duration = currentTime - Number(loan.createdAt.toString());
         expectedInterest = Math.floor(Number(loanPrincipal) * loanApy * duration / (10_000 * 31_536_000));
 
         totalRepayment = loanPrincipal + BigInt(expectedInterest);
 
         // Mint enough USDC to the user to repay the loan
-        // await mintTo(
-        //   provider.connection,
-        //   adminAccount,
-        //   usdcMint,
-        //   userUsdcAccount,
-        //   adminAccount,
-        //   totalRepayment
-        // );
+        await mintTo(
+          provider.connection,
+          adminAccount,
+          usdcMint,
+          userUsdcAccount,
+          adminAccount,
+          totalRepayment
+        );
       });
 
       it('successfully repays a loan and receives collateral back', async function () { // New test
@@ -364,6 +364,30 @@ describe('radar-lend', function () { // Changed to regular function
           throw new Error("Loan not found or already repaid");
         }
 
+        // Fetch Shrub's USDC balance before repayment
+        const shrubUsdcBefore = await getAccount(provider.connection, shrubUsdcAccount);
+
+        // Fetch user's USDC balance before repayment
+        const userUsdcBefore = await getAccount(provider.connection, userUsdcAccount);
+
+        console.log(`
+            pdaAccount: ${shrubPda},
+            user: ${userAccount.publicKey},
+            userUsdcAccount: ${userUsdcAccount},
+            shrubUsdcAccount: ${shrubUsdcAccount},
+            usdcMint: ${usdcMint},
+            systemProgram: ${SYSTEM_PROGRAM},
+            tokenProgram: ${TOKEN_PROGRAM_ID},
+            associatedTokenProgram: ${ASSOCIATED_TOKEN_PROGRAM_ID},
+        `)
+        const pdaAccountInfo = await provider.connection.getAccountInfo(shrubPda);
+        const userAccountInfo = await provider.connection.getAccountInfo(userAccount.publicKey)
+        console.log("pdaAccountInfo", pdaAccountInfo)
+        console.log("userAccountInfo", userAccountInfo)
+        // console.log(`pdaAccount info: ${(await provider.connection.getAccountInfo(shrubPda))}`);
+        // console.log(`userAccount info: ${(await provider.connection.getAccountInfo(userAccount.publicKey))}`);
+        
+        
         // Repay the loan
         await program.methods.repayLoan(loanId)
           .accounts({
@@ -381,19 +405,15 @@ describe('radar-lend', function () { // Changed to regular function
 
         // Fetch Shrub's USDC balance after repayment
         const shrubUsdcAfter = await getAccount(provider.connection, shrubUsdcAccount);
-        const shrubUsdcBefore = await getAccount(provider.connection, shrubUsdcAccount); // This should be fetched before repayment
-        // Adjusting the test: Fetching before repayment is already done in the 'before' hook
-        // Hence, compare with the amount after the transfer
-        expect(shrubUsdcAfter.amount).to.equal(shrubUsdcBefore.amount + totalRepayment);
+        expect(shrubUsdcAfter.amount.toString()).to.equal((shrubUsdcBefore.amount.toBigInt() + totalRepayment).toString());
 
         // Fetch user's USDC balance after repayment
         const userUsdcAfter = await getAccount(provider.connection, userUsdcAccount);
-        const userUsdcBefore = await getAccount(provider.connection, userUsdcAccount); // This should be fetched before repayment
-        expect(userUsdcAfter.amount).to.equal(userUsdcBefore.amount - totalRepayment);
+        expect(userUsdcAfter.amount.toString()).to.equal((userUsdcBefore.amount.toBigInt() - totalRepayment).toString());
 
         // Fetch user's SOL balance after receiving collateral
         const userSolAfter = await provider.connection.getBalance(userAccount.publicKey);
-        // Optionally, verify the SOL balance increased by loanCollateral
+        // Optionally, fetch user's SOL balance before repayment to compare
 
         // Fetch loan details to ensure it's marked as repaid
         const updatedPdaAccountData = await program.account.dataAccount.fetch(shrubPda);

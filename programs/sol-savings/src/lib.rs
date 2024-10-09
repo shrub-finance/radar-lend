@@ -128,9 +128,6 @@ pub mod radar_lend {
     pub fn repay_loan(ctx: Context<RepayLoan>, loan_id: u64) -> Result<()> {
         let current_time = Clock::get()?.unix_timestamp;
 
-        // Clone the PDA's public key before mutable borrow to avoid conflicts
-        let pda_key = ctx.accounts.pda_account.key().clone();
-
         // Find the loan index by loan_id
         let loan_index = ctx
             .accounts
@@ -140,6 +137,8 @@ pub mod radar_lend {
             .position(|loan| loan.id == loan_id)
             .ok_or(ErrorCode::LoanNotFound)?;
 
+        let pda_account_bump = ctx.accounts.pda_account.bump;
+        let pda_account_key = ctx.accounts.pda_account.key();
         let pda_account_info = ctx.accounts.pda_account.to_account_info();
         // Make a mutable reference to the loan
         let loan = &mut ctx.accounts.pda_account.loans[loan_index];
@@ -155,7 +154,6 @@ pub mod radar_lend {
         }
 
         // Calculate interest: principal * (apy / 10000) * (duration / SECONDS_IN_YEAR)
-        // To maintain precision, perform the calculation using u128
         let duration = (current_time - loan.created_at) as u128;
         // if duration < 0 {
         //     return Err(ErrorCode::InvalidLoanDuration.into());
@@ -186,19 +184,28 @@ pub mod radar_lend {
             total_repayment_u64,
         )?;
 
-        // Transfer SOL collateral back to the user
+        // Transfer SOL collateral back to the user using PDA's signature
+        let binding = ctx.accounts.admin.key();
+        let seeds = &[b"shrub", binding.as_ref(), &[pda_account_bump]];
+        let signer_seeds = &[&seeds[..]];
+
+        msg!("&pda_account_key: {}", &pda_account_key);
+        msg!("accounts.user.key(): {}", &ctx.accounts.user.key());
+        msg!("loan.collateral: {}", loan.collateral);
+
         let transfer_sol_ix = anchor_lang::solana_program::system_instruction::transfer(
-            &pda_key, // Use the cloned PDA key here
+            &pda_account_key,
             &ctx.accounts.user.key(),
             loan.collateral,
         );
-        anchor_lang::solana_program::program::invoke(
+        anchor_lang::solana_program::program::invoke_signed(
             &transfer_sol_ix,
             &[
                 pda_account_info,
                 ctx.accounts.user.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
             ],
+            signer_seeds,
         )?;
 
         // Mark the loan as repaid
@@ -206,12 +213,12 @@ pub mod radar_lend {
 
         // Emit a LoanRepaid event
         emit!(LoanRepaid {
-            loan_id,
-            borrower: ctx.accounts.user.key(),
-            principal: loan.principal,
-            interest: total_repayment_u64 - loan.principal,
-            collateral: loan.collateral,
-        });
+        loan_id,
+        borrower: ctx.accounts.user.key(),
+        principal: loan.principal,
+        interest: total_repayment_u64 - loan.principal,
+        collateral: loan.collateral,
+    });
 
         Ok(())
     }
