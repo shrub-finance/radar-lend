@@ -17,6 +17,7 @@
 /build
 
 # misc
+.anchor
 .DS_Store
 *.pem
 
@@ -36,4 +37,7 @@ yarn-error.log*
 next-env.d.ts
 .idea
 target
-.anchor
+**/*.rs.bk
+node_modules
+test-ledger
+.yarn
