@@ -1,27 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { handleErrorMessagesFactory } from '../../components/HandleErrorMessages';
-// import { NATIVE_TOKEN_ADDRESS } from "@thirdweb-dev/sdk";
-// import {
-//   EXCHANGE_RATE_BUFFER,
-//   interestToLTV,
-//   isInvalidOrZero,
-//   ONE_HUNDRED_PERCENT,
-//   percentMul,
-//   roundEth,
-// } from "../../utils/ethMethods";
 import Image from 'next/image';
 import { useValidation } from '../../hooks/useValidation';
 import ErrorDisplay from '../../components/ErrorDisplay';
 import Tooltip from '../../components/Tooltip';
 import {
   calculateRequiredCollateral,
-  EXCHANGE_RATE_BUFFER,
   interestToLTV,
   isInvalidOrZero,
-  ONE_HUNDRED_PERCENT,
-  roundSol,
 } from '../../utils/methods';
-import { interestRates, Zero } from '../../constants';
+import { interestRates } from '../../constants';
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 interface BorrowViewProps {
@@ -188,12 +176,15 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
       console.log('Borrow amount:', borrowAmount);
 
       const ltv = interestToLTV[selectedInterestRate];
-      const LAMPORTS_PER_SOL = BigInt(1_000_000_000); // 1 SOL = 1 billion lamports
       const borrowAmountInLamports = BigInt(
         Number(borrowAmount) * 1_000_000
       );
-      const coll: BigInt = borrowAmountInLamports * BigInt(ltv)*BigInt(1000000)*LAMPORTS_PER_SOL/BigInt(10000)/BigInt(solanaPrice)
-
+      const coll: BigInt = BigInt(
+        Math.round(
+          (Number(borrowAmountInLamports) * Number(ltv) * 1_000_000 * LAMPORTS_PER_SOL) /
+          (10_000 * solanaPrice)
+        )
+      );
       return calculateRequiredCollateral(coll);
     }
 
@@ -225,6 +216,7 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
 
   const handleInterestRateChange = (rate: string) => {
     console.log('Interest rate changed:', rate);
+    setLocalError('');
     setSelectedInterestRate(rate);
     setShowBorrowAPYSection(true);
   };
