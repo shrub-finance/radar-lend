@@ -318,7 +318,7 @@ describe('radar-lend', function () { // Changed to regular function
           usdcMint,
           userUsdcAccount,
           adminAccount,
-          totalRepayment
+          BigInt(totalRepayment)
         );
 
         // Fetch Shrub's USDC balance before repayment
@@ -344,15 +344,11 @@ describe('radar-lend', function () { // Changed to regular function
 
         // Fetch Shrub's USDC balance after repayment
         const shrubUsdcAfter = await getAccount(provider.connection, shrubUsdcAccount);
-        expect(shrubUsdcAfter.amount.toNumber()).to.equal(shrubUsdcBefore.amount.toNumber() + totalRepayment);
+        expect(shrubUsdcAfter.amount.toString()).to.equal((BigInt(shrubUsdcBefore.amount.toString()) + BigInt(totalRepayment)).toString());
 
         // Fetch user's USDC balance after repayment
         const userUsdcAfter = await getAccount(provider.connection, userUsdcAccount);
-        expect(userUsdcAfter.amount.toNumber()).to.equal(userUsdcBefore.amount.toNumber() - totalRepayment);
-
-        // Fetch user's SOL balance after receiving collateral
-        const userSolAfter = await provider.connection.getBalance(userAccount.publicKey);
-        // Note: This assertion assumes that the collateral was transferred back. Depending on timing, it might need to be adjusted.
+        expect(userUsdcAfter.amount.toString()).to.equal((BigInt(userUsdcBefore.amount.toString()) - BigInt(totalRepayment)).toString());
 
         // Fetch loan details to ensure it's marked as repaid
         const updatedPdaAccountData = await program.account.dataAccount.fetch(shrubPda);
@@ -362,13 +358,55 @@ describe('radar-lend', function () { // Changed to regular function
       });
 
       it('prevents non-borrowers from repaying a loan', async function () { // New test
-        // Attempt to repay a loan that doesn't belong to this user
-        // For simplicity, assume admin tries to repay user’s loan
+        // Create a new user who is not the borrower
+        const nonBorrower = anchor.web3.Keypair.generate();
 
-        // Fetch loan details
-        const pdaAccountData = await program.account.dataAccount.fetch(shrubPda);
-        const loan = pdaAccountData.loans.find(l => l.id === 1 && !l.repaid);
-        expect(loan).to.not.exist; // Loan should already be repaid from previous test
+        // Airdrop SOL to the non-borrower
+        const latestBlockhash = await provider.connection.getLatestBlockhash();
+        const signature = await provider.connection.requestAirdrop(nonBorrower.publicKey, 1_000_000_000);
+        await provider.connection.confirmTransaction({
+          signature: signature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        });
+
+        // Create USDC account for the non-borrower
+        const nonBorrowerUsdcAccount = await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          nonBorrower,
+          usdcMint,
+          nonBorrower.publicKey
+        ).then(acc => acc.address);
+
+        // Mint enough USDC to the non-borrower to attempt repayment
+        await mintTo(
+          provider.connection,
+          adminAccount,
+          usdcMint,
+          nonBorrowerUsdcAccount,
+          adminAccount,
+          BigInt(loan.principal + expectedInterest)
+        );
+
+        // Attempt to repay the loan as a non-borrower
+        try {
+          await program.methods.repayLoan(new anchor.BN(1))
+            .accounts({
+              pdaAccount: shrubPda,
+              user: nonBorrower.publicKey,
+              userUsdcAccount: nonBorrowerUsdcAccount,
+              shrubUsdcAccount: shrubUsdcAccount,
+              usdcMint: usdcMint,
+              systemProgram: SYSTEM_PROGRAM,
+              tokenProgram: TOKEN_PROGRAM_ID,
+              associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            })
+            .signers([nonBorrower])
+            .rpc();
+          expect.fail("Expected error for unauthorized repayment");
+        } catch (err: any) {
+          expect(err.message).to.include("Unauthorized");
+        }
       });
 
       it('prevents repaying an already repaid loan', async function () { // New test
@@ -388,10 +426,11 @@ describe('radar-lend', function () { // Changed to regular function
             .signers([userAccount])
             .rpc();
           expect.fail("Expected error for already repaid loan");
-        } catch (err) {
+        } catch (err: any) {
           expect(err.message).to.include("Loan already repaid");
         }
       });
     });
+
   });
 });

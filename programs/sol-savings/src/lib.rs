@@ -8,7 +8,7 @@ declare_id!("4aXgVPzHdoVsKSZWS4op4oHTHHqrFHkkpV93NshquE6L");
 pub mod radar_lend {
     use super::*;
 
-    const SOL_PRICE_USD: u64 = 100_000_000; // Hard-coded SOL price in USDC (100 USDC per SOL)
+    const SOL_PRICE_USD: u64 = 100_000_000; // 100 USDC per SOL
     const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
     const SECONDS_IN_YEAR: i64 = 31_536_000;
 
@@ -56,8 +56,8 @@ pub mod radar_lend {
 
         let required_collateral_lamports_u64 = required_collateral_lamports as u64;
 
-        msg!("collateral: {}", collateral);
-        msg!("required_collateral_lamports_u64: {}", required_collateral_lamports_u64);
+        msg!("Provided collateral: {}", collateral);
+        msg!("Required collateral (lamports): {}", required_collateral_lamports_u64);
 
         // Verify that the provided collateral meets or exceeds the required collateral
         if collateral < required_collateral_lamports_u64 {
@@ -81,7 +81,8 @@ pub mod radar_lend {
 
         // Transfer USDC from the Shrub's USDC account to the user's USDC account
         // Since the PDA is the authority, we need to sign with PDA's seeds
-        let seeds = &[b"shrub", ctx.accounts.admin.key.as_ref(), &[ctx.accounts.pda_account.bump]];
+        let binding = ctx.accounts.admin.key();
+        let seeds = &[b"shrub", binding.as_ref(), &[ctx.accounts.pda_account.bump]];
         let signer_seeds = &[&seeds[..]];
 
         token::transfer(
@@ -127,11 +128,10 @@ pub mod radar_lend {
     pub fn repay_loan(ctx: Context<RepayLoan>, loan_id: u64) -> Result<()> {
         let current_time = Clock::get()?.unix_timestamp;
 
-        // Store pda_account.key() before mutable borrow
-        let pda_pubkey = ctx.accounts.pda_account.key();
-        let pda_account_info = ctx.accounts.pda_account.to_account_info();
+        // Clone the PDA's public key before mutable borrow to avoid conflicts
+        let pda_key = ctx.accounts.pda_account.key().clone();
 
-        // Find the loan index by loan_id to avoid holding an immutable reference to the entire struct
+        // Find the loan index by loan_id
         let loan_index = ctx
             .accounts
             .pda_account
@@ -140,7 +140,8 @@ pub mod radar_lend {
             .position(|loan| loan.id == loan_id)
             .ok_or(ErrorCode::LoanNotFound)?;
 
-        // Make a mutable reference to the loan now that the index has been identified
+        let pda_account_info = ctx.accounts.pda_account.to_account_info();
+        // Make a mutable reference to the loan
         let loan = &mut ctx.accounts.pda_account.loans[loan_index];
 
         // Ensure the loan is not already repaid
@@ -187,7 +188,7 @@ pub mod radar_lend {
 
         // Transfer SOL collateral back to the user
         let transfer_sol_ix = anchor_lang::solana_program::system_instruction::transfer(
-            &pda_pubkey,
+            &pda_key, // Use the cloned PDA key here
             &ctx.accounts.user.key(),
             loan.collateral,
         );
@@ -208,7 +209,7 @@ pub mod radar_lend {
             loan_id,
             borrower: ctx.accounts.user.key(),
             principal: loan.principal,
-            interest: (total_repayment_u64 - loan.principal),
+            interest: total_repayment_u64 - loan.principal,
             collateral: loan.collateral,
         });
 
@@ -318,24 +319,6 @@ pub struct TakeLoan<'info> {
 }
 
 #[derive(Accounts)]
-pub struct DepositUsdc<'info> {
-    /// The admin account.
-    #[account(mut)]
-    pub admin: Signer<'info>,
-
-    /// The admin's USDC token account.
-    #[account(mut)]
-    pub admin_usdc_account: Account<'info, TokenAccount>,
-
-    /// The Shrub PDA's associated USDC token account.
-    #[account(mut)]
-    pub shrub_usdc_account: Account<'info, TokenAccount>,
-
-    /// Token program.
-    pub token_program: Program<'info, Token>,
-}
-
-#[derive(Accounts)]
 pub struct RepayLoan<'info> {
     /// The PDA account.
     #[account(
@@ -375,6 +358,24 @@ pub struct RepayLoan<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
+#[derive(Accounts)]
+pub struct DepositUsdc<'info> {
+    /// The admin who is depositing USDC.
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    /// The admin's USDC token account.
+    #[account(mut)]
+    pub admin_usdc_account: Account<'info, TokenAccount>,
+
+    /// The Shrub PDA's USDC token account.
+    #[account(mut)]
+    pub shrub_usdc_account: Account<'info, TokenAccount>,
+
+    /// Token program.
+    pub token_program: Program<'info, Token>,
+}
+
 /// The PDA account structure.
 #[account]
 pub struct DataAccount {
@@ -387,21 +388,21 @@ impl DataAccount {
     /// Space required for the DataAccount:
     /// - admin: 32 bytes
     /// - bump: 1 byte
-    /// - loans: 4 bytes (vector length) + 41 bytes * 10 loans
-    /// Total: 32 + 1 + 4 + 410 = 447 bytes
-    const INIT_SPACE: usize = 32 + 1 + 4 + 41 * 10;
+    /// - loans: 4 bytes (vector length) + 67 bytes * 10 loans
+    /// Total: 32 + 1 + 4 + 670 = 707 bytes
+    const INIT_SPACE: usize = 32 + 1 + 4 + 67 * 10;
 }
 
 /// Represents an individual loan.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct Loan {
-    pub id: u64,          // Unique loan identifier
-    pub principal: u64,   // Amount of USDC borrowed
-    pub apy: u16,         // Annual Percentage Yield in basis points
-    pub collateral: u64,  // Amount of SOL collateralized
-    pub created_at: i64,  // Timestamp when the loan was created
-    pub borrower: Pubkey, // The borrower of the loan
-    pub repaid: bool,     // Indicates if the loan has been repaid
+    pub id: u64,          // 8 bytes
+    pub principal: u64,   // 8 bytes
+    pub apy: u16,         // 2 bytes
+    pub collateral: u64,  // 8 bytes
+    pub created_at: i64,  // 8 bytes
+    pub borrower: Pubkey, // 32 bytes
+    pub repaid: bool,     // 1 byte
 }
 
 /// Custom error types.
