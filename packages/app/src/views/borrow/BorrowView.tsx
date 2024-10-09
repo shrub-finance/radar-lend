@@ -87,21 +87,7 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
     }
   }, []);
 
-  // async function fillMax() {
-  //   if (
-  //     lendingPlatformIsLoading ||
-  //     lendingPlatformError ||
-  //     ethBalanceIsLoading
-  //   ) {
-  //     handleErrorMessages({
-  //       customMessage: "Wallet not connected. Please check your connection.",
-  //     });
-  //     console.log("wallet not connected");
-  //   } else {
-  //     console.log(ethers.utils.formatUnits(maxBorrow, 6));
-  //     setBorrowAmount(ethers.utils.formatUnits(maxBorrow, 6));
-  //   }
-  // }
+
   const handleAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     let inputValue = event.target.value.trim();
 
@@ -168,43 +154,45 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
     // Set the formatted display value
     setDisplayAmount(formattedValue);
   };
+  const [solanaPrice, setSolanaPrice] = useState<number | null>(null);
 
-  async function getSolanaPrice() {
+  const getSolanaPrice = async () => {
+    // setSolanaPrice(150000000);
     try {
       const response = await fetch(
         'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd'
       );
       if (!response.ok) {
-        throw new Error('Failed to fetch Solana price');
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
       const data = await response.json();
-      return data.solana.usd;
+      setSolanaPrice(data.solana.usd * 1000000);
+      handleErrorMessages(''); // Clear any previous errors
     } catch (error) {
       console.error('Error fetching Solana price:', error);
-      return null; // Return null or default value on failure
+      handleErrorMessages({
+        customMessage: 'Failed to fetch Solana price. Please try again later.',
+      });
     }
-  }
+  };
 
-  getSolanaPrice().then((price) => {
-    if (price !== null) {
-      console.log('SOL price in USD:', price);
-    } else {
-      console.log('Failed to fetch SOL price');
-    }
-  });
+  useEffect(() => {
+    // Fetch the price only once when the component loads
+    getSolanaPrice();
+  }, []); // Empty dependency array ensures it runs only once
 
   useEffect(() => {
     async function determineRequiredCollateral() {
+      console.log('Calculating required collateral...');
+      console.log('Selected interest rate:', selectedInterestRate);
+      console.log('Borrow amount:', borrowAmount);
+
       const ltv = interestToLTV[selectedInterestRate];
       const LAMPORTS_PER_SOL = BigInt(1_000_000_000); // 1 SOL = 1 billion lamports
       const borrowAmountInLamports = BigInt(
-        Number(borrowAmount) * 1_000_000_000
+        Number(borrowAmount) * 1_000_000
       );
-      // const coll: BigNumber = await lendingPlatform.call('requiredCollateral', [
-      //   ltv,
-      //   usdcUnits,
-      // ]);
-      const coll: BigInt = BigInt(20000000000);
+      const coll: BigInt = borrowAmountInLamports * BigInt(ltv)*BigInt(1000000)*LAMPORTS_PER_SOL/BigInt(10000)/BigInt(solanaPrice)
 
       return calculateRequiredCollateral(coll);
     }
@@ -214,8 +202,13 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
       borrowAmount !== '0' &&
       !isInvalidOrZero(borrowAmount)
     ) {
+
       determineRequiredCollateral()
-        .then((res) => setRequiredCollateral(BigInt(res)))
+        .then((res) => {
+          // Convert to integer by scaling, e.g., multiply by 10^6
+          const scaledValue = Math.round(res * 1_000_000);
+          setRequiredCollateral(BigInt(scaledValue));
+        })
         .catch((e) => {
           console.error(e);
           handleErrorMessages({
@@ -229,6 +222,12 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
     // lendingPlatform,
     setRequiredCollateral,
   ]);
+
+  const handleInterestRateChange = (rate: string) => {
+    console.log('Interest rate changed:', rate);
+    setSelectedInterestRate(rate);
+    setShowBorrowAPYSection(true);
+  };
 
   useEffect(() => {
     getMaxBorrow()
@@ -373,9 +372,7 @@ export const BorrowView: React.FC<BorrowViewProps> = ({
                             value={id}
                             className="hidden peer"
                             checked={rate === selectedInterestRate}
-                            onChange={() => {
-                              setSelectedInterestRate(rate);
-                            }}
+                            onChange={() => handleInterestRateChange(rate)}
                             required
                           />
                           <label

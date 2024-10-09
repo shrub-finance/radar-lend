@@ -8,6 +8,17 @@ export const AppBar: React.FC = () => {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 1024);
+    };
+
+    handleResize(); // Call once on load
+    window.addEventListener('resize', handleResize);
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // @ts-ignore
   const handleNavClick = (label) => {
     setIsNavOpen(false);
@@ -86,7 +97,7 @@ export const AppBar: React.FC = () => {
           <div className="inline-flex self-auto">
             {isConnected ? (
               <>
-                <w3m-network-button />
+                {!isMobile && <w3m-network-button />}
                 <w3m-button loadingLabel="" size="md" label="Connect Wallet" />
               </>
             ) : (

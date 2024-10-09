@@ -4,9 +4,10 @@ import Image from 'next/image';
 import { handleErrorMessagesFactory } from '../../components/HandleErrorMessages';
 import Confetti from 'react-confetti';
 import { truncateAddress } from '../../utils/methods';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 interface BorrowSummaryViewProps {
-  requiredCollateral: string;
+  requiredCollateral: BigInt;
   timestamp: number;
   interestRate: string;
   amount: string;
@@ -15,13 +16,13 @@ interface BorrowSummaryViewProps {
 }
 
 export const BorrowSummaryView: FC<BorrowSummaryViewProps> = ({
-  backtoBorrowDuration,
-  onCancel,
-  requiredCollateral,
-  timestamp,
-  interestRate,
-  amount,
-}) => {
+                                                                backtoBorrowDuration,
+                                                                onCancel,
+                                                                requiredCollateral,
+                                                                timestamp,
+                                                                interestRate,
+                                                                amount,
+                                                              }) => {
   const router = useRouter();
   const [localError, setLocalError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -116,7 +117,7 @@ export const BorrowSummaryView: FC<BorrowSummaryViewProps> = ({
                   </div>
                   <p className="text-shrub-grey-700 text-lg text-left font-normal pt-8 max-w-[550px] pb-6">
                     You are borrowing {amount} USDC and providing{' '}
-                    {requiredCollateral} SOL as collateral.
+                    {(Number(requiredCollateral) / Number(LAMPORTS_PER_SOL)).toFixed(6)} SOL as collateral.
                   </p>
                   <div className="mb-2 flex flex-col gap-3 text-shrub-grey-200 text-lg font-light">
                     {/* Interest Rate Section */}
@@ -158,7 +159,7 @@ export const BorrowSummaryView: FC<BorrowSummaryViewProps> = ({
                           <Image
                             alt="copy icon"
                             src="/copy.svg"
-                            className="w-6 md:inline hidden align-baseline ml-2" // Hide on mobile, show on md+
+                            className="w-6 md:inline hidden align-baseline ml-2"
                             width="24"
                             height="24"
                           />
@@ -171,7 +172,7 @@ export const BorrowSummaryView: FC<BorrowSummaryViewProps> = ({
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5 mr-1" // Show checkmark on mobile
+                            className="h-5 w-5 mr-1"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -187,51 +188,7 @@ export const BorrowSummaryView: FC<BorrowSummaryViewProps> = ({
                         </span>
                       </span>
                     </div>
-                    <div className="flex flex-row justify-between items-center relative">
-                      <span>Contract Address</span>
 
-                      <span
-                        className="flex items-center relative cursor-pointer"
-                        onClick={handleCopyClick}
-                      >
-                        <span
-                          className={`flex items-center transition-opacity duration-500 ${
-                            copied ? 'opacity-0' : 'opacity-100'
-                          }`}
-                        >
-                          {truncateAddress(walletAddress)}
-                          <Image
-                            alt="copy icon"
-                            src="/copy.svg"
-                            className="w-6 md:inline hidden align-baseline ml-2" // Hide on mobile, show on md+
-                            width="24"
-                            height="24"
-                          />
-                        </span>
-
-                        <span
-                          className={`absolute flex items-center font-semibold sm:left-[61px] left-[31px] text-shrub-green-500 transition-opacity duration-500 ${
-                            copied ? 'opacity-100' : 'opacity-0'
-                          }`}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5 mr-1" // Show checkmark on mobile
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                          Copied!
-                        </span>
-                      </span>
-                    </div>
                   </div>
                   {/* Confetti and Notification */}
                   {confetti && <Confetti />}
