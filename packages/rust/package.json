@@ -1,15 +1,7 @@
 {
-  "name": "radar-lend",
+  "name": "rust",
   "version": "1.0.0",
-  "description": "Solana smart contract for SOL savings and USDC lending",
-  "keywords": [
-    "solana",
-    "anchor",
-    "blockchain",
-    "defi",
-    "lending"
-  ],
-  "author": "Your Name",
+  "private": true,
   "license": "ISC",
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",

@@ -4,6 +4,14 @@
   "main": "index.js",
   "repository": "git@github.com:shrub-finance/radar-lend.git",
   "license": "MIT",
+  "description": "Solana smart contract for SOL savings and USDC lending",
+  "keywords": [
+    "solana",
+    "anchor",
+    "blockchain",
+    "defi",
+    "lending"
+  ],
   "private": true,
   "workspaces": [
     "packages/*"
@@ -12,9 +20,9 @@
     "dev": "yarn workspace app dev",
     "build:app": "yarn workspace app build",
     "app": "yarn build:app && yarn workspace app start",
-    "deploy": "yarn workspace programs deploy",
-    "build": "yarn workspace programs build",
-    "test": "yarn workspace programs test",
+    "deploy": "yarn workspace rust deploy",
+    "build": "yarn workspace rust build",
+    "test": "yarn workspace rust test",
     "postinstall": "patch-package"
   },
   "resolutions": {
