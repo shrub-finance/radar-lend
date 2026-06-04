@@ -20,7 +20,7 @@
     "@solana/web3.js": "1.95.2",
     "@tailwindcss/typography": "^0.5.9",
     "@web3-react/core": "^8.2.3",
-    "axios": "^1.7.7",
+    "axios": "^1.16.0",
     "daisyui": "^1.24.3",
     "date-fns": "^2.29.3",
     "immer": "^9.0.12",
